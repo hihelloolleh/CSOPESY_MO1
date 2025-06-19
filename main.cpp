@@ -30,7 +30,7 @@ void clearScreen() {
 
 int main() {
     std::vector<std::string> validCommands = {
-        "initialize", "screen -s", "screen -r" "scheduler-start",
+        "initialize", "screen -s", "screen -r", "scheduler-start",
         "scheduler-stop", "report-util", "process-smi", "clear", "exit"
     };
 
