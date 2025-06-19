@@ -1,29 +1,35 @@
-// g++ main.cpp config.cpp shared_globals.cpp cpu_core.cpp scheduler.cpp -o csopesy_emu.exe -std=c++17 -lpthread
-// csopesy_emu.exe
-
 #include "shared_globals.h"
 #include "config.h"
 #include "cpu_core.h"
-#include "scheduler.h" 
 #include <iostream>
 #include <string>
 #include <vector>
 #include <sstream>
 #include <thread>
-#include <cstdlib> // For srand
-#include <ctime>   // For time
-
-// A vector to hold our worker threads so we can manage them
-std::vector<std::thread> cpu_worker_threads;
 
 // Function to start all CPU core worker threads
-void start_cpu_cores() {
-    // Clear any old threads first, just in case
-    cpu_worker_threads.clear();
+void start_cpu_cores(std::vector<std::thread>& workers) {
     for (int i = 0; i < global_config.num_cpu; ++i) {
-        cpu_worker_threads.emplace_back(cpu_core_worker, i);
+        workers.emplace_back(cpu_core_worker, i);
     }
-    std::cout << global_config.num_cpu << " CPU cores started and running in the background." << std::endl;
+    std::cout << global_config.num_cpu << " CPU cores started." << std::endl;
+}
+
+// A simple test function to add a process to the queue
+void add_test_process() {
+    Process* p = new Process();
+    p->id = process_list.size() + 1;
+    p->name = "test_proc_" + std::to_string(p->id);
+    
+    // In the future, this is where you'd generate random instructions
+    
+    {
+        std::lock_guard<std::mutex> lock(queue_mutex);
+        process_list.push_back(p);
+        ready_queue.push(p);
+    }
+    queue_cv.notify_one(); // Wake up one sleeping core
+    std::cout << "Added " << p->name << " to the ready queue." << std::endl;
 }
 
 void print_header() {
@@ -38,33 +44,26 @@ void print_header() {
 
 -------------------------------------------------     
     )" << std::endl;
-    std::cout << "Type 'initialize' to begin or 'exit' to quit.\n\n";
+    std::cout << "\n--- CSOPESY Process Scheduler and CLI ---\n\n";
 }
 
 void clear_screen() {
 #ifdef _WIN32
-    system("cls");
+    system("cls"); // Windows
 #else
-    system("clear");
+    system("clear"); // Unix/Linux/macOS
 #endif
     print_header();
 }
 
-// The main loop for handling user commands from the command-line interface.
 void cli_loop() {
     std::string line;
-    clear_screen(); // Start with a clean screen
+    print_header();
 
     while (system_running) {
-        std::cout << "root:\\> ";
+        std::cout << "Enter Command > ";
         if (!std::getline(std::cin, line)) {
-            // This handles Ctrl+D (on Linux) or end of input stream
-            if (std::cin.eof()) {
-                std::cout << "EOF detected, exiting." << std::endl;
-                system_running = false;
-                queue_cv.notify_all();
-            }
-            break; 
+            break; // Exit on Ctrl+D or stream error
         }
 
         std::stringstream ss(line);
@@ -75,10 +74,9 @@ void cli_loop() {
             continue;
         }
 
-        // --- Handle commands that can be run anytime ---
         if (command == "exit") {
             system_running = false;
-            queue_cv.notify_all(); // Wake all threads so they can check the running flag and exit
+            queue_cv.notify_all(); // Wake up all threads so they can terminate
             break;
         }
 
@@ -87,41 +85,33 @@ void cli_loop() {
             continue;
         }
 
-        // --- Gatekeeper: Check if the system is initialized ---
+        // --- Commands requiring initialization ---
         if (!is_initialized) {
             if (command == "initialize") {
                 if (loadConfiguration("config.txt", global_config)) {
                     is_initialized = true;
-                    std::cout << "System initialized successfully from config.txt." << std::endl;
-                    start_cpu_cores(); // Start the CPU cores now that we know how many we need
+                    std::cout << "System initialized successfully." << std::endl;
+                    // Automatically start the CPU cores after initialization
+                    std::vector<std::thread> workers;
+                    start_cpu_cores(workers);
+                    // In a real app, you'd manage these threads better,
+                    // but for now, we'll detach them to let them run in the background.
+                    for (auto& t : workers) {
+                        t.detach();
+                    }
                 } else {
-                    std::cerr << "Initialization FAILED. Please check config.txt and try again." << std::endl;
+                    std::cerr << "Initialization failed. Please check config.txt." << std::endl;
                 }
             } else {
                 std::cerr << "Error: System not initialized. Please run 'initialize' first." << std::endl;
             }
-            continue; // Go back to the start of the loop
+            continue;
         }
         
-        // --- Commands that require initialization ---
-        if (command == "scheduler-start") {
-            if (!generating_processes) {
-                generating_processes = true; // This is the 'on' switch for the generator thread
-                std::cout << "Process generator has been started." << std::endl;
-            } else {
-                std::cout << "Generator is already running." << std::endl;
-            }
-        } else if (command == "scheduler-stop") {
-            if (generating_processes) {
-                generating_processes = false; // This is the 'off' switch
-                std::cout << "Process generator has been stopped." << std::endl;
-            } else {
-                std::cout << "Generator is not currently running." << std::endl;
-            }
-        } else if (command == "initialize") {
-             std::cout << "System is already initialized." << std::endl;
-        }
-        else {
+        // --- Place other commands here ---
+        if (command == "test-add") {
+            add_test_process();
+        } else {
             std::cout << "Unknown command: '" << command << "'" << std::endl;
         }
     }
@@ -129,39 +119,16 @@ void cli_loop() {
 
 
 int main() {
-    // Seed the random number generator ONCE at the very start of the program
-    srand(static_cast<unsigned int>(time(nullptr))); 
-
-    // --- Start Background System Threads ---
-    // These threads will run for the entire lifetime of the application.
-    std::thread clock(clock_thread);
-    std::thread generator(process_generator_thread);
-    
-    // The main CLI loop will run on the main thread, blocking until it's time to exit.
     cli_loop();
 
-    std::cout << "\nShutdown initiated. Waiting for threads to complete..." << std::endl;
+    std::cout << "Shutting down... please wait." << std::endl;
     
-    // --- Graceful Shutdown Sequence ---
-    
-    // 1. Wait for the background system threads to finish.
-    if (clock.joinable()) clock.join();
-    if (generator.joinable()) generator.join();
-    
-    // 2. Wait for the CPU worker threads to finish.
-    for (auto& t : cpu_worker_threads) {
-        if (t.joinable()) {
-            t.join();
-        }
-    }
-
-    // 3. Cleanup dynamically allocated memory for all created processes.
-    std::cout << "Cleaning up " << process_list.size() << " process records..." << std::endl;
+    // Cleanup allocated memory
     for (auto p : process_list) {
         delete p;
     }
     process_list.clear();
 
-    std::cout << "Shutdown complete. Goodbye!" << std::endl;
+    std::cout << "Shutdown complete." << std::endl;
     return 0;
 }
