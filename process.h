@@ -1,0 +1,32 @@
+#ifndef PROCESS_H
+#define PROCESS_H
+
+#include <string>
+#include <vector>
+#include <map>
+#include <cstdint> // For uint16_t
+
+// Represents a single command in a process's script
+struct Instruction {
+    std::string opcode;
+    std::vector<std::string> args;
+};
+
+// Represents a process with its script, state, and variables
+struct Process {
+    int id;
+    std::string name;
+    
+    std::vector<Instruction> instructions;
+    int program_counter = 0;
+    std::map<std::string, uint16_t> variables;
+
+    // State and logging information
+    int assigned_core = -1;
+    bool finished = false;
+    std::string start_time;
+    std::string end_time;
+    std::vector<std::string> logs; // For storing output from PRINT
+};
+
+#endif // PROCESS_H

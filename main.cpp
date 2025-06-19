@@ -1,68 +1,124 @@
+#include "shared_globals.h"
+#include "config.h"
+#include "cpu_core.h"
 #include <iostream>
 #include <string>
 #include <vector>
-#include <cstdlib> 
- // test 
+#include <sstream>
+#include <thread>
 
-void printHeader() {
-    std::cout << R"(
--------------------------------------------------                                                                        
-  _____  _____  ___________ _____ _______   __
-/  __ \/  ___||  _  | ___ \  ___/  ___\ \ / /
-| /  \/\ `--. | | | | |_/ / |__ \ `--. \ V / 
-| |     `--. \| | | |  __/|  __| `--. \ \ /  
-| \__/\/\__/ /\ \_/ / |   | |___/\__/ / | |  
- \____/\____/  \___/\_|   \____/\____/  \_/ 
-
--------------------------------------------------     
-    )" << std::endl;
-    std::cout << "Enter command:\n";
+// Function to start all CPU core worker threads
+void start_cpu_cores(std::vector<std::thread>& workers) {
+    for (int i = 0; i < global_config.num_cpu; ++i) {
+        workers.emplace_back(cpu_core_worker, i);
+    }
+    std::cout << global_config.num_cpu << " CPU cores started." << std::endl;
 }
 
-void clearScreen() {
-    #ifdef _WIN32
-        system("cls");  // Windows
-    #else
-        system("clear"); // Unix/Linux/macOS
-    #endif
-    printHeader();
+// A simple test function to add a process to the queue
+void add_test_process() {
+    Process* p = new Process();
+    p->id = process_list.size() + 1;
+    p->name = "test_proc_" + std::to_string(p->id);
+    
+    // In the future, this is where you'd generate random instructions
+    
+    {
+        std::lock_guard<std::mutex> lock(queue_mutex);
+        process_list.push_back(p);
+        ready_queue.push(p);
+    }
+    queue_cv.notify_one(); // Wake up one sleeping core
+    std::cout << "Added " << p->name << " to the ready queue." << std::endl;
 }
 
-int main() {
-    std::vector<std::string> validCommands = {
-        "initialize", "screen -s", "screen -r", "scheduler-start",
-        "scheduler-stop", "report-util", "process-smi", "clear", "exit"
-    };
+void print_header() {
+    // Basic header, can be replaced with ASCII art later
+    std::cout << "\n--- CSOPESY Process Scheduler and CLI ---\n";
+}
 
-    bool running = true;
-    printHeader();
+void clear_screen() {
+#ifdef _WIN32
+    system("cls");
+#else
+    system("clear");
+#endif
+    print_header();
+}
 
-    while (running) {
-        std::string input;
-        std::cout << "> ";
-        std::getline(std::cin, input);
+void cli_loop() {
+    std::string line;
+    print_header();
 
-        if (input == "exit") {
-            std::cout << "Exiting application.\n";
-            running = false;
+    while (system_running) {
+        std::cout << "root:\\> ";
+        if (!std::getline(std::cin, line)) {
+            break; // Exit on Ctrl+D or stream error
         }
-        else if (input == "clear") {
-            clearScreen();
+
+        std::stringstream ss(line);
+        std::string command;
+        ss >> command;
+
+        if (command.empty()) {
+            continue;
         }
-        else {
-            bool found = false;
-            for (const auto& cmd : validCommands) {
-                if (input == cmd) {
-                    std::cout << cmd << " command recognized. Doing something.\n";
-                    found = true;
-                    break;
+
+        if (command == "exit") {
+            system_running = false;
+            queue_cv.notify_all(); // Wake up all threads so they can terminate
+            break;
+        }
+
+        if (command == "clear") {
+            clear_screen();
+            continue;
+        }
+
+        // --- Commands requiring initialization ---
+        if (!is_initialized) {
+            if (command == "initialize") {
+                if (loadConfiguration("config.txt", global_config)) {
+                    is_initialized = true;
+                    std::cout << "System initialized successfully." << std::endl;
+                    // Automatically start the CPU cores after initialization
+                    std::vector<std::thread> workers;
+                    start_cpu_cores(workers);
+                    // In a real app, you'd manage these threads better,
+                    // but for now, we'll detach them to let them run in the background.
+                    for (auto& t : workers) {
+                        t.detach();
+                    }
+                } else {
+                    std::cerr << "Initialization failed. Please check config.txt." << std::endl;
                 }
+            } else {
+                std::cerr << "Error: System not initialized. Please run 'initialize' first." << std::endl;
             }
-            if (!found) {
-                std::cout << "Unknown command: " << input << "\n";
-            }
+            continue;
+        }
+        
+        // --- Place other commands here ---
+        if (command == "test-add") {
+            add_test_process();
+        } else {
+            std::cout << "Unknown command: '" << command << "'" << std::endl;
         }
     }
+}
 
-    return EXIT_SUCCESS;
+
+int main() {
+    cli_loop();
+
+    std::cout << "Shutting down... please wait." << std::endl;
+    
+    // Cleanup allocated memory
+    for (auto p : process_list) {
+        delete p;
+    }
+    process_list.clear();
+
+    std::cout << "Shutdown complete." << std::endl;
+    return 0;
 }
