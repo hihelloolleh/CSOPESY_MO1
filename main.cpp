@@ -33,15 +33,25 @@ void add_test_process() {
 }
 
 void print_header() {
-    // Basic header, can be replaced with ASCII art later
-    std::cout << "\n--- CSOPESY Process Scheduler and CLI ---\n";
+    std::cout << R"(
+-------------------------------------------------                                                                        
+  _____  _____  ___________ _____ _______   __
+/  __ \/  ___||  _  | ___ \  ___/  ___\ \ / /
+| /  \/\ `--. | | | | |_/ / |__ \ `--. \ V / 
+| |     `--. \| | | |  __/|  __| `--. \ \ /  
+| \__/\/\__/ /\ \_/ / |   | |___/\__/ / | |  
+ \____/\____/  \___/\_|   \____/\____/  \_/ 
+
+-------------------------------------------------     
+    )" << std::endl;
+    std::cout << "\n--- CSOPESY Process Scheduler and CLI ---\n\n";
 }
 
 void clear_screen() {
 #ifdef _WIN32
-    system("cls");
+    system("cls"); // Windows
 #else
-    system("clear");
+    system("clear"); // Unix/Linux/macOS
 #endif
     print_header();
 }
@@ -51,7 +61,7 @@ void cli_loop() {
     print_header();
 
     while (system_running) {
-        std::cout << "root:\\> ";
+        std::cout << "Enter Command > ";
         if (!std::getline(std::cin, line)) {
             break; // Exit on Ctrl+D or stream error
         }
