@@ -3,7 +3,8 @@
 #include <thread>
 #include <chrono>
 #include <iostream>
-#include <random> // Better for random number generation
+#include <random>
+#include <vector>
 
 // --- Clock Implementation ---
 void clock_thread() {
@@ -15,48 +16,49 @@ void clock_thread() {
     }
 }
 
-// --- Process Generator Implementation ---
-
-// Helper function to create a single process with a randomized script
 Process* create_random_process() {
-    static std::atomic<int> process_counter(0); // Safely count processes
+    static std::atomic<int> process_counter(0);
     process_counter++;
 
     Process* p = new Process();
     p->id = process_counter;
     p->name = "p" + std::to_string(p->id);
 
-    // Determine the number of instructions for this process
     int instruction_count = rand() % (global_config.max_ins - global_config.min_ins + 1) + global_config.min_ins;
 
-    // A simple list of available opcodes to choose from
-    const std::vector<std::string> opcodes = {"DECLARE", "ADD", "PRINT"};
+    // We will add more opcodes here as we implement them.
+    const std::vector<std::string> opcodes = {"PRINT"}; // For now, only generate PRINT instructions for testing
 
     for (int i = 0; i < instruction_count; ++i) {
         Instruction inst;
-        int choice = rand() % opcodes.size();
-        inst.opcode = opcodes[choice];
+        inst.opcode = opcodes[rand() % opcodes.size()];
 
-        // Generate arguments based on opcode
-        if (inst.opcode == "DECLARE") {
-            inst.args.push_back("v" + std::to_string(rand() % 5)); // var name (e.g., v0, v1...)
-            inst.args.push_back(std::to_string(rand() % 100));     // value
-        } else if (inst.opcode == "ADD") {
-            inst.args.push_back("v" + std::to_string(rand() % 5)); // dest var
-            inst.args.push_back("v" + std::to_string(rand() % 5)); // src var 1
-            inst.args.push_back("v" + std::to_string(rand() % 5)); // src var 2
-        } else if (inst.opcode == "PRINT") {
-             // As per spec, use a fixed message
+        if (inst.opcode == "PRINT") {
+            // For now, let's create a simple, fixed message as per the spec's note.
             inst.args.push_back("Hello world from " + p->name + "!");
         }
+        
+        // Example of how to add variable printing in the future:
+        /*
+        else if (inst.opcode == "DECLARE") {
+            // ... logic to create DECLARE ...
+        }
+        if (i > 0 && rand() % 2 == 0) { // 50% chance to print a variable
+             std::string var_to_print = "v" + std::to_string(rand() % 5);
+             inst.opcode = "PRINT";
+             inst.args.push_back("Value of " + var_to_print + " is: ");
+             inst.args.push_back(var_to_print);
+        }
+        */
+        
         p->instructions.push_back(inst);
     }
+    return p;
+}
     
     // std::cout << get_timestamp() << " [Generator] Created process " << p->name << " with " << instruction_count << " instructions." << std::endl;
     // The generation should happen silently in the background so it doesn't interrupt the user's console input.
     
-    return p;
-}
 
 
 void process_generator_thread() {

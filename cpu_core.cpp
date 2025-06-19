@@ -1,48 +1,59 @@
 #include "cpu_core.h"
 #include "shared_globals.h"
+#include "instructions.h" 
 #include <iostream>
 #include <thread>
+#include <chrono>
 
 void cpu_core_worker(int core_id) {
     while (system_running) {
         Process* process = nullptr;
 
-        // --- Wait for and get a process from the ready queue ---
+        // This block for getting a process (or handling idle state) is correct.
         {
             std::unique_lock<std::mutex> lock(queue_mutex);
-            // Wait until the queue is not empty OR the system is shutting down
-            queue_cv.wait(lock, [] { return !ready_queue.empty() || !system_running; });
-
-            // If the system is shutting down, exit the thread
-            if (!system_running) {
-                return;
+            if (ready_queue.empty()) {
+                lock.unlock();
+                if (core_id == 0) {
+                    cpu_ticks++;
+                    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                } else {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                }
+                continue;
             }
-
             process = ready_queue.front();
             ready_queue.pop();
         }
 
-        // --- Execute the process ---
-        /*if (process) {
+        if (process) {
             process->assigned_core = core_id;
             process->start_time = get_timestamp();
 
-            std::cout << get_timestamp() << " Core " << core_id << ": Starting process " << process->name << std::endl;
+            // ===================================================================
+            // THIS IS THE CORRECTED INTERPRETER LOOP
+            // ===================================================================
+            while (process->program_counter < process->instructions.size() && system_running) {
+                
+                // 1. Execute the instruction at the current program counter
+                execute_instruction(process);
 
-            // !! THIS IS WHERE THE INTERPRETER LOGIC WILL GO !!
-            // For now, we'll just simulate work and mark it as finished.
-            
-            // Simulating work based on instruction count
-            int instruction_count = 5; // Replace with process->instructions.size() later
-            for (int i = 0; i < instruction_count; ++i) {
-                // Simulate instruction execution
-                std::this_thread::sleep_for(std::chrono::milliseconds(200));
-                 if (!system_running) break; // Allow for graceful shutdown
+                // 2. Apply the "busy-wait" delay
+                for (int i = 0; i < global_config.delay_per_exec; ++i) {
+                    cpu_ticks++;
+                }
+                
+                // 3. The execution itself costs one tick
+                cpu_ticks++;
+
+                // 4. *** THIS IS THE FIX: Advance to the next instruction ***
+                process->program_counter++;
             }
-
-            process->end_time = get_timestamp();
-            process->finished = true;
-            std::cout << get_timestamp() << " Core " << core_id << ": Finished process " << process->name << std::endl;
-        } */
+            
+            if (process->program_counter >= process->instructions.size()) {
+                process->end_time = get_timestamp();
+                process->finished = true;
+            }
+        }
     }
 }
