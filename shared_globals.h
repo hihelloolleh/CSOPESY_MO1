@@ -8,6 +8,13 @@
 #include <queue>
 #include <atomic>
 #include <vector>
+#include <cstdint> // For uint64_t
+
+// --- System Clock ---
+extern std::atomic<uint64_t> cpu_ticks;
+
+// --- Process Generation ---
+extern std::atomic<bool> generating_processes;
 
 // --- Global State ---
 extern std::atomic<bool> system_running;

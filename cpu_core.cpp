@@ -23,7 +23,7 @@ void cpu_core_worker(int core_id) {
         }
 
         // --- Execute the process ---
-        if (process) {
+        /*if (process) {
             process->assigned_core = core_id;
             process->start_time = get_timestamp();
 
@@ -43,6 +43,6 @@ void cpu_core_worker(int core_id) {
             process->end_time = get_timestamp();
             process->finished = true;
             std::cout << get_timestamp() << " Core " << core_id << ": Finished process " << process->name << std::endl;
-        }
+        } */
     }
 }
