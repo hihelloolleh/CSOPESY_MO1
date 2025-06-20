@@ -29,7 +29,11 @@ std::string get_timestamp() {
     auto now = std::chrono::system_clock::now();
     time_t time = std::chrono::system_clock::to_time_t(now);
     tm local_tm;
-    localtime_s(&local_tm, &time); // Using safer localtime_s for Windows
+    #if defined(_WIN32) || defined(_WIN64)
+        localtime_s(&local_tm, &time); // Windows
+    #else
+        localtime_r(&time, &local_tm); // POSIX (macOS/Linux)
+    #endif
 
     std::stringstream ss;
     ss << std::put_time(&local_tm, "(%m/%d/%Y %I:%M:%S%p)");

@@ -104,7 +104,7 @@ void cli_loop() {
         else if (command == "scheduler-start") {
             if (!generating_processes) {
                 generating_processes = true;
-                std::cout << "Process generator has been started." << std::endl;
+                std::cout << "Process generator has been started. Type 'scheduler-stop' to stop it." << std::endl;
             } else {
                 std::cout << "Generator is already running." << std::endl;
             }

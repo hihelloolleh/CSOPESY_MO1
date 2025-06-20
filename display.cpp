@@ -12,9 +12,9 @@
 
 void clear_console() {
 #ifdef _WIN32
-    system("cls");
+    system("cls"); //for windows
 #else
-    system("clear");
+    system("clear"); //for macOS/Linux
 #endif
 }
 
