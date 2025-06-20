@@ -28,6 +28,7 @@ extern std::mutex queue_mutex;
 extern std::condition_variable queue_cv;
 extern std::queue<Process*> ready_queue;
 extern std::vector<Process*> process_list; // Master list of all processes created
+extern std::vector<bool> core_busy; // Track which cores are currently busy
 
 // --- Utility ---
 std::string get_timestamp();

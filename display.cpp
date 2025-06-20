@@ -32,14 +32,14 @@ void print_header() {
 void generate_system_report(std::ostream& output_stream) {
     std::lock_guard<std::mutex> lock(queue_mutex);
 
-    int running_count = 0;
-    for (const auto& p : process_list) {
-        if (!p->finished) {
-            running_count++;
+    // Count actually busy cores
+    int cores_used = 0;
+    for (size_t i = 0; i < core_busy.size(); ++i) {
+        if (core_busy[i]) {
+            cores_used++;
         }
     }
     
-    int cores_used = running_count;
     int cores_available = global_config.num_cpu - cores_used;
     int cpu_utilization = (global_config.num_cpu > 0) ? (static_cast<int>((static_cast<double>(cores_used) / global_config.num_cpu) * 100.0)) : 0;
 

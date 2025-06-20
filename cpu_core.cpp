@@ -27,9 +27,19 @@ void cpu_core_worker(int core_id) {
 
         if (process) {
             process->assigned_core = core_id;
-            process->start_time = get_timestamp();
+            if (process->start_time.empty()) {
+                process->start_time = get_timestamp();
+            }
+            
+            // Mark this core as busy
+            {
+                std::lock_guard<std::mutex> lock(queue_mutex);
+                if (core_id < core_busy.size()) {
+                    core_busy[core_id] = true;
+                }
+            }
 
-                // INTERPRETER LOOP
+            // INTERPRETER LOOP
             while (process->program_counter < process->instructions.size() && system_running) {
                 
                 execute_instruction(process);
@@ -47,6 +57,14 @@ void cpu_core_worker(int core_id) {
             if (process->program_counter >= process->instructions.size()) {
                 process->end_time = get_timestamp();
                 process->finished = true;
+            }
+            
+            // Mark this core as free
+            {
+                std::lock_guard<std::mutex> lock(queue_mutex);
+                if (core_id < core_busy.size()) {
+                    core_busy[core_id] = false;
+                }
             }
         }
     }

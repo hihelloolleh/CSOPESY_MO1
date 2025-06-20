@@ -24,6 +24,8 @@ std::vector<std::thread> cpu_worker_threads;
 // Helper function to start all CPU core worker threads after initialization.
 void start_cpu_cores() {
     cpu_worker_threads.clear();
+    core_busy.clear();
+    core_busy.resize(global_config.num_cpu, false);
     for (int i = 0; i < global_config.num_cpu; ++i) {
         cpu_worker_threads.emplace_back(cpu_core_worker, i); // Each thread is created and runs the cpu_core_worker function with its unique core ID.
     }
@@ -113,14 +115,67 @@ void cli_loop() {
             if (arg1 == "-ls") {
                 generate_system_report(std::cout);
             } 
-            else if ((arg1 == "-s" || arg1 == "-r") && !arg2.empty()) {
+            else if (arg1 == "-s" && !arg2.empty()) {
+                std::string process_name = arg2;
+                Process* target_process = nullptr;
+                
+                // First check if process already exists
+                {
+                    std::lock_guard<std::mutex> lock(queue_mutex);
+                    for (auto& p : process_list) {
+                        if (p->name == process_name) {
+                            target_process = p;
+                            break;
+                        }
+                    }
+                }
+
+                // If process doesn't exist, create it
+                if (target_process == nullptr) {
+                    target_process = create_random_process();
+                    target_process->name = process_name;
+                    
+                    {
+                        std::lock_guard<std::mutex> lock(queue_mutex);
+                        process_list.push_back(target_process);
+                        ready_queue.push(target_process);
+                    }
+                    queue_cv.notify_one();
+                }
+
+                // Enter process view
+                bool in_process_view = true;
+                while (in_process_view) {
+                    display_process_view(target_process);
+                    
+                    if (target_process->finished) {
+                        std::cout << "root:\\> ";
+                        std::this_thread::sleep_for(std::chrono::seconds(2));
+                        in_process_view = false;
+                        continue;
+                    }
+                    
+                    std::cout << "root:\\> ";
+                    std::string process_command;
+                    std::getline(std::cin, process_command);
+
+                    if (process_command == "exit") {
+                        in_process_view = false;
+                    } else if (process_command == "process-smi") {
+                        continue;
+                    }
+                }
+                clear_console();
+                print_header();
+            }
+            else if (arg1 == "-r" && !arg2.empty()) {
                 std::string process_name = arg2;
                 Process* target_process = nullptr;
                 
                 {
                     std::lock_guard<std::mutex> lock(queue_mutex);
                     for (auto& p : process_list) {
-                        if (p->name == process_name && !p->finished) {
+                        if (p->name == process_name) {
                             target_process = p;
                             break;
                         }
@@ -151,9 +206,8 @@ void cli_loop() {
                     }
                     clear_console();
                     print_header();
-
                 } else {
-                    std::cout << "Process <" << process_name << "> not found or has finished.\n";
+                    std::cout << "Process <" << process_name << "> not found.\n";
                 }
             } else {
                  std::cout << "Invalid screen command. Use 'screen -ls', 'screen -s <name>', or 'screen -r <name>'.\n";
