@@ -25,9 +25,6 @@ void print_header() {
  | \__/\/\__/ /\ \_/ / |   | |___/\__/ / | |  
   \____/\____/  \___/\_|   \____/\____/  \_/  
     )" << std::endl;
-    std::cout << "Welcome to CSOPESY Emulator!" << std::endl;
-    std::cout << "Developers: Del Gallego, Neil Patrick" << std::endl;
-    std::cout << "Last updated: 01-18-2024" << std::endl;
     std::cout << "-------------------------------------------------\n";
 }
 
