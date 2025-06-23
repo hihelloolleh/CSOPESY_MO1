@@ -32,6 +32,70 @@ void start_cpu_cores() {
     std::cout << global_config.num_cpu << " CPU cores have been started." << std::endl;
 }
 
+// helper func, refractored -s -r into one function.
+void enter_process_screen(const std::string& process_name, bool allow_create) {
+    Process* target_process = nullptr;
+
+    {
+        std::lock_guard<std::mutex> lock(queue_mutex);
+        for (auto& p : process_list) {
+            if (p->name == process_name) {
+                target_process = p;
+                break;
+            }
+        }
+    }
+
+	// If process finished cant load
+    if (target_process && target_process->finished) {
+        std::cout << "Process <" << process_name << "> has finished execution. Cannot access.\n";
+        return;
+    }
+
+    // Create new process if allowed
+    if (!target_process && allow_create) {
+        target_process = create_random_process();
+        target_process->name = process_name;
+
+        {
+            std::lock_guard<std::mutex> lock(queue_mutex);
+            process_list.push_back(target_process);
+            ready_queue.push(target_process);
+        }
+        queue_cv.notify_one();
+    }
+
+    if (!target_process) {
+        std::cout << "Process <" << process_name << "> not found.\n";
+        return;
+    }
+
+    clear_console();
+    display_process_view(target_process);
+
+    bool in_process_view = true;
+    while (in_process_view) {
+        std::cout << "root:\\> ";
+        std::string process_command;
+        std::getline(std::cin, process_command);
+
+        if (process_command == "exit") {
+            in_process_view = false;
+        }
+        else if (process_command == "process-smi") {
+            display_process_view(target_process); 
+        }
+        else {
+            std::cout << "Unknown command in screen session. Only 'exit' or 'process-smi' are allowed.\n";
+        }
+    }
+
+    clear_console();
+    print_header();
+}
+
+
+
 //handles all user input, parses commands, and dispatches them to the appropriate handlers. It runs on the main thread.
 void cli_loop() {
     std::string line;
@@ -114,103 +178,16 @@ void cli_loop() {
         else if (command == "screen") {
             if (arg1 == "-ls") {
                 generate_system_report(std::cout);
-            } 
-            else if (arg1 == "-s" && !arg2.empty()) {
-                std::string process_name = arg2;
-                Process* target_process = nullptr;
-                
-                // First check if process already exists
-                {
-                    std::lock_guard<std::mutex> lock(queue_mutex);
-                    for (auto& p : process_list) {
-                        if (p->name == process_name) {
-                            target_process = p;
-                            break;
-                        }
-                    }
-                }
-
-                // If process doesn't exist, create it
-                if (target_process == nullptr) {
-                    target_process = create_random_process();
-                    target_process->name = process_name;
-                    
-                    {
-                        std::lock_guard<std::mutex> lock(queue_mutex);
-                        process_list.push_back(target_process);
-                        ready_queue.push(target_process);
-                    }
-                    queue_cv.notify_one();
-                }
-
-                // Enter process view
-                bool in_process_view = true;
-                while (in_process_view) {
-                    display_process_view(target_process);
-                    
-                    if (target_process->finished) {
-                        std::cout << "root:\\> ";
-                        std::this_thread::sleep_for(std::chrono::seconds(2));
-                        in_process_view = false;
-                        continue;
-                    }
-                    
-                    std::cout << "root:\\> ";
-                    std::string process_command;
-                    std::getline(std::cin, process_command);
-
-                    if (process_command == "exit") {
-                        in_process_view = false;
-                    } else if (process_command == "process-smi") {
-                        continue;
-                    }
-                }
-                clear_console();
-                print_header();
             }
-            else if (arg1 == "-r" && !arg2.empty()) {
-                std::string process_name = arg2;
-                Process* target_process = nullptr;
-                
-                {
-                    std::lock_guard<std::mutex> lock(queue_mutex);
-                    for (auto& p : process_list) {
-                        if (p->name == process_name) {
-                            target_process = p;
-                            break;
-                        }
-                    }
-                }
-
-                if (target_process != nullptr) {
-                    bool in_process_view = true;
-                    while (in_process_view) {
-                        display_process_view(target_process);
-                        
-                        if (target_process->finished) {
-                            std::cout << "root:\\> ";
-                            std::this_thread::sleep_for(std::chrono::seconds(2));
-                            in_process_view = false;
-                            continue;
-                        }
-                        
-                        std::cout << "root:\\> ";
-                        std::string process_command;
-                        std::getline(std::cin, process_command);
-
-                        if (process_command == "exit") {
-                            in_process_view = false;
-                        } else if (process_command == "process-smi") {
-                            continue;
-                        }
-                    }
-                    clear_console();
-                    print_header();
-                } else {
-                    std::cout << "Process <" << process_name << "> not found.\n";
-                }
-            } else {
-                 std::cout << "Invalid screen command. Use 'screen -ls', 'screen -s <name>', or 'screen -r <name>'.\n";
+            else if ((arg1 == "-s" || arg1 == "-r") && !arg2.empty()) {
+                bool allow_create = (arg1 == "-s");
+                enter_process_screen(arg2, allow_create);
+            }
+            else {
+                std::cout << "Invalid screen usage. Try one of:\n";
+                std::cout << "  screen -ls\n";
+                std::cout << "  screen -s <process name>\n";
+                std::cout << "  screen -r <process name>\n";
             }
         }
         else {

@@ -75,8 +75,6 @@ void generate_system_report(std::ostream& output_stream) {
 void display_process_view(Process* process) {
     std::lock_guard<std::mutex> lock(queue_mutex);
 
-    clear_console();
-
     // --- Header Information ---
     std::cout << std::left << std::setw(28) << "Process name:" << process->name << "\n";
     std::cout << std::left << std::setw(28) << "ID:" << process->id << "\n";
