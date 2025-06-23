@@ -91,18 +91,24 @@ void enter_process_screen(const std::string& process_name, bool allow_create) {
             std::string opcode;
             ss >> opcode;
 
-            Instruction instr;
-            instr.opcode = opcode;
+            // Check if it's a valid Barebones instruction
+            if (opcode == "ADD" || opcode == "SUBTRACT" || opcode == "DECLARE" || opcode == "PRINT") {
+                Instruction instr;
+                instr.opcode = opcode;
 
-            std::string arg;
-            while (ss >> arg) {
-                instr.args.push_back(arg);
+                std::string arg;
+                while (ss >> arg) {
+                    instr.args.push_back(arg);
+                }
+
+                target_process->instructions.push_back(instr);
+                target_process->program_counter = target_process->instructions.size() - 1;
+
+                execute_instruction(target_process);
             }
-
-            target_process->instructions.push_back(instr);
-            target_process->program_counter = target_process->instructions.size() - 1;
-
-            execute_instruction(target_process);
+            else {
+                std::cout << "Unknown command in screen session. Only 'exit', 'process-smi', or a valid Barebones instruction (ADD, SUBTRACT, DECLARE, PRINT) are allowed.\n";
+            }
         }
     }
 
