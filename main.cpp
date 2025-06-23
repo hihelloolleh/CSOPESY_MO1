@@ -17,6 +17,7 @@
 #include "cpu_core.h"
 #include "scheduler.h"
 #include "display.h"
+#include "instructions.h"
 
 // A vector to hold our CPU worker threads so we can manage them during shutdown.
 std::vector<std::thread> cpu_worker_threads;
@@ -83,12 +84,28 @@ void enter_process_screen(const std::string& process_name, bool allow_create) {
             in_process_view = false;
         }
         else if (process_command == "process-smi") {
-            display_process_view(target_process); 
+            display_process_view(target_process);
         }
         else {
-            std::cout << "Unknown command in screen session. Only 'exit' or 'process-smi' are allowed.\n";
+            std::stringstream ss(process_command);
+            std::string opcode;
+            ss >> opcode;
+
+            Instruction instr;
+            instr.opcode = opcode;
+
+            std::string arg;
+            while (ss >> arg) {
+                instr.args.push_back(arg);
+            }
+
+            target_process->instructions.push_back(instr);
+            target_process->program_counter = target_process->instructions.size() - 1;
+
+            execute_instruction(target_process);
         }
     }
+
 
     clear_console();
     print_header();
