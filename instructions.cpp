@@ -16,6 +16,19 @@ void execute_instruction(Process* process) {
     if (current_instruction.opcode == "PRINT") {
         handle_print(process, current_instruction);
     }
+
+    else if (current_instruction.opcode == "DECLARE") {
+        handle_declare(process, current_instruction);
+    }
+
+    else if (current_instruction.opcode == "ADD") {
+        handle_add(process, current_instruction);
+    }
+
+    else if (current_instruction.opcode == "SUBTRACT") {
+        handle_subtract(process, current_instruction);
+    }
+
     // else if (current_instruction.opcode == "ADD") {
     //     handle_add(process, current_instruction); // To be implemented in the future
     // }
@@ -34,24 +47,95 @@ void execute_instruction(Process* process) {
  */
 void handle_print(Process* process, const Instruction& instr) {
     std::stringstream formatted_log;
-    // Start the log entry with the timestamp and core ID, as shown in the spec examples
     formatted_log << get_timestamp() << " Core:" << process->assigned_core << " \"";
 
-    // Loop through all arguments provided for the PRINT instruction
     for (const std::string& arg : instr.args) {
-        // Check if the argument is a known variable name
-        auto it = process->variables.find(arg);
-        if (it != process->variables.end()) {
-            // If it IS a variable, append its stored value
-            formatted_log << it->second;
-        } else {
-            // If it's NOT a variable, it's a string literal, so append it directly
-            formatted_log << arg;
+        try {
+            auto it = process->variables.find(arg);
+            if (it != process->variables.end()) {
+                formatted_log << it->second;
+            }
+            else {
+                formatted_log << arg;
+            }
+        }
+        catch (...) {
+            std::cerr << "[ERROR] Failed to format PRINT argument: " << arg << std::endl;
+            formatted_log << "[ERR]";
         }
     }
 
-    formatted_log << "\""; // Close the quote as per spec examples
-
-    // Store the fully formatted string into the process's personal log vector
+    formatted_log << "\"";
     process->logs.push_back(formatted_log.str());
+}
+
+
+void handle_declare(Process* process, const Instruction& instr) {
+    if (instr.args.size() != 2) return;
+
+    std::string var_name = instr.args[0];
+    try {
+        uint16_t value = static_cast<uint16_t>(std::stoi(instr.args[1]));
+        process->variables[var_name] = value;
+    }
+    catch (...) {
+        std::cerr << "[ERROR] Invalid value in DECLARE: " << instr.args[1] << std::endl;
+    }
+}
+
+
+void handle_add(Process* process, const Instruction& instr) {
+    if (instr.args.size() != 3) return;
+
+    std::string dest = instr.args[0];
+    uint16_t val1 = 0;
+    uint16_t val2 = 0;
+
+    try {
+        if (process->variables.find(instr.args[1]) != process->variables.end())
+            val1 = process->variables[instr.args[1]];
+        else
+            val1 = static_cast<uint16_t>(std::stoi(instr.args[1]));
+
+        if (process->variables.find(instr.args[2]) != process->variables.end())
+            val2 = process->variables[instr.args[2]];
+        else
+            val2 = static_cast<uint16_t>(std::stoi(instr.args[2]));
+
+        process->variables[dest] = std::min(static_cast<uint32_t>(val1) + val2, static_cast<uint32_t>(UINT16_MAX));
+    }
+    catch (...) {
+        std::cerr << "[ERROR] Invalid operands in ADD: ";
+        for (const auto& arg : instr.args) std::cerr << arg << " ";
+        std::cerr << std::endl;
+    }
+}
+
+
+void handle_subtract(Process* process, const Instruction& instr) {
+    if (instr.args.size() != 3) return;
+
+    std::string dest = instr.args[0];
+    uint16_t val1 = 0;
+    uint16_t val2 = 0;
+
+    try {
+        if (process->variables.find(instr.args[1]) != process->variables.end())
+            val1 = process->variables[instr.args[1]];
+        else
+            val1 = static_cast<uint16_t>(std::stoi(instr.args[1]));
+
+        if (process->variables.find(instr.args[2]) != process->variables.end())
+            val2 = process->variables[instr.args[2]];
+        else
+            val2 = static_cast<uint16_t>(std::stoi(instr.args[2]));
+
+        int32_t result = static_cast<int32_t>(val1) - static_cast<int32_t>(val2);
+        process->variables[dest] = result < 0 ? 0 : static_cast<uint16_t>(result);
+    }
+    catch (...) {
+        std::cerr << "[ERROR] Invalid operands in SUBTRACT: ";
+        for (const auto& arg : instr.args) std::cerr << arg << " ";
+        std::cerr << std::endl;
+    }
 }

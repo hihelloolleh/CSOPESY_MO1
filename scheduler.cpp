@@ -27,30 +27,36 @@ Process* create_random_process() {
     int instruction_count = rand() % (global_config.max_ins - global_config.min_ins + 1) + global_config.min_ins;
 
     // We will add more opcodes here as we implement them.
-    const std::vector<std::string> opcodes = {"PRINT"}; // For now, only generate PRINT instructions for testing
+    const std::vector<std::string> opcodes = {
+    "DECLARE", "ADD", "SUBTRACT", "PRINT"
+    }; //added declare, add, subtract and print
 
     for (int i = 0; i < instruction_count; ++i) {
         Instruction inst;
         inst.opcode = opcodes[rand() % opcodes.size()];
 
-        if (inst.opcode == "PRINT") {
-            // For now, let's create a simple, fixed message as per the spec's note.
-            inst.args.push_back("Hello world from " + p->name + "!");
+        if (inst.opcode == "DECLARE") {
+            std::string var_name = "v" + std::to_string(rand() % 5);
+            int value = rand() % 100;
+            inst.args = { var_name, std::to_string(value) };
         }
-        
-        // Example of how to add variable printing in the future:
-        /*
-        else if (inst.opcode == "DECLARE") {
-            // ... logic to create DECLARE ...
+        else if (inst.opcode == "ADD" || inst.opcode == "SUBTRACT") {
+            std::string var1 = "v" + std::to_string(rand() % 5);
+            std::string operand1 = "v" + std::to_string(rand() % 5);
+            std::string operand2 = std::to_string(rand() % 50);  // Could be a value
+            inst.args = { var1, operand1, operand2 };
         }
-        if (i > 0 && rand() % 2 == 0) { // 50% chance to print a variable
-             std::string var_to_print = "v" + std::to_string(rand() % 5);
-             inst.opcode = "PRINT";
-             inst.args.push_back("Value of " + var_to_print + " is: ");
-             inst.args.push_back(var_to_print);
+        else if (inst.opcode == "PRINT") {
+            // 50% chance to print a variable or a plain message
+            if (rand() % 2 == 0) {
+                std::string var = "v" + std::to_string(rand() % 5);
+                inst.args = { "Value of " + var + ": ", var };
+            }
+            else {
+                inst.args = { "Hello world from ", p->name };
+            }
         }
-        */
-        
+
         p->instructions.push_back(inst);
     }
     return p;
@@ -81,6 +87,7 @@ void process_generator_thread() {
                 queue_cv.notify_one(); // Tell a waiting CPU core there's a new job
             }
         }
+
         // Sleep for a short time to prevent this thread from using 100% CPU
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
