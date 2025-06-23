@@ -18,11 +18,13 @@ void clock_thread() {
 
 Process* create_random_process() {
     static std::atomic<int> process_counter(0);
+    int max_priority = 100; 
     process_counter++;
 
     Process* p = new Process();
     p->id = process_counter;
     p->name = "p" + std::to_string(p->id);
+    p->priority = rand() % 100; 
 
     int instruction_count = rand() % (global_config.max_ins - global_config.min_ins + 1) + global_config.min_ins;
 
