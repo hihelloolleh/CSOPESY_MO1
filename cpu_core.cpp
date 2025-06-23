@@ -46,11 +46,32 @@ void cpu_core_worker(int core_id) {
 
         int exec_count = 0;
         while (process->program_counter < process->instructions.size() && system_running) {
+            // Skip if process is waiting
+            if (process->state == ProcessState::WAITING) {
+                if (cpu_ticks < process->sleep_until_tick) {
+                    // Still sleeping, requeue and yield
+                    std::lock_guard<std::mutex> lock(queue_mutex);
+                    ready_queue.push(process);
+                    break;
+                }
+                else {
+                    // Done sleeping
+                    process->state = ProcessState::RUNNING;
+                }
+            }
+
             execute_instruction(process);
 
             for (int i = 0; i < global_config.delay_per_exec; ++i)
                 cpu_ticks++;
             cpu_ticks++;
+
+            // If the instruction was SLEEP, we must requeue now
+            if (process->state == ProcessState::WAITING) {
+                std::lock_guard<std::mutex> lock(queue_mutex);
+                ready_queue.push(process);
+                break;
+            }
 
             process->program_counter++;
             exec_count++;

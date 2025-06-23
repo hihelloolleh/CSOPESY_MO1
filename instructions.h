@@ -17,6 +17,7 @@ void handle_print(Process* process, const Instruction& instr);
 void handle_declare(Process* process, const Instruction& instr);
 void handle_add(Process* process, const Instruction& instr);
 void handle_subtract(Process* process, const Instruction& instr);
-// void handle_sleep(Process* process, const Instruction& instr);
+void handle_sleep(Process* process, const Instruction& instr);
+//void handle_for(Process* process, const Instruction& instr);
 
 #endif // INSTRUCTIONS_H

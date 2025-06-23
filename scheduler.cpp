@@ -28,7 +28,7 @@ Process* create_random_process() {
 
     // We will add more opcodes here as we implement them.
     const std::vector<std::string> opcodes = {
-    "DECLARE", "ADD", "SUBTRACT", "PRINT"
+    "DECLARE", "ADD", "SUBTRACT", "PRINT", "SLEEP"
     }; //added declare, add, subtract and print
 
     for (int i = 0; i < instruction_count; ++i) {
@@ -55,6 +55,10 @@ Process* create_random_process() {
             else {
                 inst.args = { "Hello world from ", p->name };
             }
+        }
+        else if (inst.opcode == "SLEEP") {
+            int ticks = rand() % 10 + 1;  // Sleep between 1 and 10 ticks
+            inst.args = { std::to_string(ticks) };
         }
 
         p->instructions.push_back(inst);
