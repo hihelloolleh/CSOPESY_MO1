@@ -2,10 +2,24 @@
 #define CONFIG_H
 
 #include <string>
+#include <fstream>  
+
+enum class SchedulerType {
+    FCFS,
+    SJF,
+    SRTF,
+    PRIORITY_NONPREEMPTIVE,
+    PRIORITY_PREEMPTIVE,
+    RR,
+    UNKNOWN
+};
+
+
 
 struct Config {
     int num_cpu = 0;
     std::string scheduler;
+    SchedulerType scheduler_type = SchedulerType::UNKNOWN;
     int quantum_cycles = 0;
     int batch_process_freq = 0;
     int min_ins = 0;

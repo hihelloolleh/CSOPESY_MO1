@@ -22,10 +22,17 @@ bool loadConfiguration(const std::string& filepath, Config& config) {
             std::string value;
             ss >> value;
             if (value.front() == '"' && value.back() == '"') {
-                config.scheduler = value.substr(1, value.length() - 2);
-            } else {
-                config.scheduler = value;
+                value = value.substr(1, value.length() - 2);
             }
+            config.scheduler = value;
+
+            if (value == "fcfs") config.scheduler_type = SchedulerType::FCFS;
+            else if (value == "sjf") config.scheduler_type = SchedulerType::SJF;
+            else if (value == "srtf") config.scheduler_type = SchedulerType::SRTF;
+            else if (value == "priority") config.scheduler_type = SchedulerType::PRIORITY_NONPREEMPTIVE;
+            else if (value == "priority-preemptive") config.scheduler_type = SchedulerType::PRIORITY_PREEMPTIVE;
+            else if (value == "rr") config.scheduler_type = SchedulerType::RR;
+            else config.scheduler_type = SchedulerType::UNKNOWN;
         }
         else if (key == "quantum-cycles") ss >> config.quantum_cycles;
         else if (key == "batch-process-freq") ss >> config.batch_process_freq;
