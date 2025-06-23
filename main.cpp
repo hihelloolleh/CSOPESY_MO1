@@ -92,7 +92,7 @@ void enter_process_screen(const std::string& process_name, bool allow_create) {
             ss >> opcode;
 
             // Check if it's a valid Barebones instruction
-            if (opcode == "ADD" || opcode == "SUBTRACT" || opcode == "DECLARE" || opcode == "PRINT") {
+            if (opcode == "ADD" || opcode == "SUBTRACT" || opcode == "DECLARE" || opcode == "PRINT" || opcode == "SLEEP") {
                 Instruction instr;
                 instr.opcode = opcode;
 

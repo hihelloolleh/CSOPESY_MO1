@@ -11,6 +11,13 @@ struct Instruction {
     std::vector<std::string> args;
 };
 
+enum class ProcessState {
+    READY,
+    RUNNING,
+    WAITING,
+    FINISHED
+};
+
 struct Process {
     int id;
     std::string name;
@@ -26,6 +33,9 @@ struct Process {
     std::vector<std::string> logs; // For storing output from PRINT
 
     int priority = 0; // lower value = higher priority
+
+    ProcessState state = ProcessState::READY;
+    uint64_t sleep_until_tick = 0;
 };
 
 #endif // PROCESS_H

@@ -28,6 +28,10 @@ void execute_instruction(Process* process) {
     else if (current_instruction.opcode == "SUBTRACT") {
         handle_subtract(process, current_instruction);
     }
+    else if (current_instruction.opcode == "SLEEP") {
+        handle_sleep(process, current_instruction);
+    }
+
 
     // else if (current_instruction.opcode == "ADD") {
     //     handle_add(process, current_instruction); // To be implemented in the future
@@ -137,5 +141,23 @@ void handle_subtract(Process* process, const Instruction& instr) {
         std::cerr << "[ERROR] Invalid operands in SUBTRACT: ";
         for (const auto& arg : instr.args) std::cerr << arg << " ";
         std::cerr << std::endl;
+    }
+}
+
+void handle_sleep(Process* process, const Instruction& instr) {
+    if (instr.args.size() != 1) return;
+
+    try {
+        uint8_t sleep_ticks = static_cast<uint8_t>(std::stoi(instr.args[0]));
+        process->state = ProcessState::WAITING;
+        process->sleep_until_tick = cpu_ticks.load() + sleep_ticks;
+
+        std::stringstream log;
+        log << get_timestamp() << " Core:" << process->assigned_core
+            << " SLEEP for " << (int)sleep_ticks << " ticks.";
+        process->logs.push_back(log.str());
+    }
+    catch (...) {
+        std::cerr << "[ERROR] Invalid operand in SLEEP: " << instr.args[0] << std::endl;
     }
 }
