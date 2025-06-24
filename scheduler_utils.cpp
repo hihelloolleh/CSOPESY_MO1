@@ -18,23 +18,25 @@ Process* select_process() {
     switch (global_config.scheduler_type) {
     case SchedulerType::FCFS:
     case SchedulerType::RR:
-        selected = temp.front(); 
+        selected = temp.front();
         break;
 
     case SchedulerType::SJF:
         selected = *std::min_element(temp.begin(), temp.end(),
             [](Process* a, Process* b) {
-                if (a->instructions.size() == b->instructions.size())
-                    return a->id < b->id; 
-                return a->instructions.size() < b->instructions.size();
+                size_t a_size = a->instructions.size();
+                size_t b_size = b->instructions.size();
+                if (a_size == b_size)
+                    return a->id < b->id;
+                return a_size < b_size;
             });
         break;
 
     case SchedulerType::SRTF:
         selected = *std::min_element(temp.begin(), temp.end(),
             [](Process* a, Process* b) {
-                int a_remain = a->instructions.size() - a->program_counter;
-                int b_remain = b->instructions.size() - b->program_counter;
+                int a_remain = static_cast<int>(a->instructions.size()) - a->program_counter;
+                int b_remain = static_cast<int>(b->instructions.size()) - b->program_counter;
                 if (a_remain == b_remain)
                     return a->id < b->id;
                 return a_remain < b_remain;

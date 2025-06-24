@@ -102,7 +102,7 @@ void enter_process_screen(const std::string& process_name, bool allow_create) {
                 }
 
                 target_process->instructions.push_back(instr);
-                target_process->program_counter = target_process->instructions.size() - 1;
+                target_process->program_counter = static_cast<int>(target_process->instructions.size() - 1);
 
                 execute_instruction(target_process);
             }
@@ -117,7 +117,17 @@ void enter_process_screen(const std::string& process_name, bool allow_create) {
     print_header();
 }
 
-
+std::string get_scheduler_name(SchedulerType type) {
+    switch (type) {
+    case SchedulerType::FCFS: return "First Come First Serve (FCFS)";
+    case SchedulerType::SJF: return "Shortest Job First (SJF)";
+    case SchedulerType::SRTF: return "Shortest Remaining Time First (SRTF)";
+    case SchedulerType::PRIORITY_NONPREEMPTIVE: return "Priority (Non-Preemptive)";
+    case SchedulerType::PRIORITY_PREEMPTIVE: return "Priority (Preemptive)";
+    case SchedulerType::RR: return "Round Robin (RR)";
+    default: return "Unknown";
+    }
+}
 
 //handles all user input, parses commands, and dispatches them to the appropriate handlers. It runs on the main thread.
 void cli_loop() {
@@ -158,6 +168,7 @@ void cli_loop() {
                 if (loadConfiguration("config.txt", global_config)) {
                     is_initialized = true;
                     std::cout << "System initialized successfully from config.txt." << std::endl;
+                    std::cout << "Scheduling Algorithm: " << get_scheduler_name(global_config.scheduler_type) << "\n";
                     start_cpu_cores();
                 } else {
                     std::cerr << "Initialization FAILED. Please check config.txt and try again." << std::endl;
