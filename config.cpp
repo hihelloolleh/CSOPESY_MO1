@@ -37,8 +37,8 @@ bool loadConfiguration(const std::string& filepath, Config& config) {
             if (value == "fcfs") config.scheduler_type = SchedulerType::FCFS;
             else if (value == "sjf") config.scheduler_type = SchedulerType::SJF;
             else if (value == "srtf") config.scheduler_type = SchedulerType::SRTF;
-            else if (value == "priority") config.scheduler_type = SchedulerType::PRIORITY_NONPREEMPTIVE;
-            else if (value == "priority-preemptive") config.scheduler_type = SchedulerType::PRIORITY_PREEMPTIVE;
+            else if (value == "priority_np") config.scheduler_type = SchedulerType::PRIORITY_NONPREEMPTIVE;
+            else if (value == "priority_p") config.scheduler_type = SchedulerType::PRIORITY_PREEMPTIVE;
             else if (value == "rr") config.scheduler_type = SchedulerType::RR;
             else config.scheduler_type = SchedulerType::UNKNOWN;
         }

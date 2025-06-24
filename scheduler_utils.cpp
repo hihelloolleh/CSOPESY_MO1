@@ -24,11 +24,8 @@ Process* select_process() {
     case SchedulerType::SJF:
         selected = *std::min_element(temp.begin(), temp.end(),
             [](Process* a, Process* b) {
-                size_t a_size = a->instructions.size();
-                size_t b_size = b->instructions.size();
-                if (a_size == b_size)
-                    return a->id < b->id;
-                return a_size < b_size;
+                return (a->instructions.size() == b->instructions.size()) ? a->id < b->id
+                    : a->instructions.size() < b->instructions.size();
             });
         break;
 
@@ -37,9 +34,7 @@ Process* select_process() {
             [](Process* a, Process* b) {
                 int a_remain = static_cast<int>(a->instructions.size()) - a->program_counter;
                 int b_remain = static_cast<int>(b->instructions.size()) - b->program_counter;
-                if (a_remain == b_remain)
-                    return a->id < b->id;
-                return a_remain < b_remain;
+                return (a_remain == b_remain) ? a->id < b->id : a_remain < b_remain;
             });
         break;
 
@@ -47,9 +42,7 @@ Process* select_process() {
     case SchedulerType::PRIORITY_PREEMPTIVE:
         selected = *std::min_element(temp.begin(), temp.end(),
             [](Process* a, Process* b) {
-                if (a->priority == b->priority)
-                    return a->id < b->id;
-                return a->priority < b->priority;
+                return (a->priority == b->priority) ? a->id < b->id : a->priority < b->priority;
             });
         break;
 
@@ -65,7 +58,6 @@ Process* select_process() {
     return selected;
 }
 
-
 bool should_preempt() {
     return global_config.scheduler_type == SchedulerType::SRTF ||
         global_config.scheduler_type == SchedulerType::PRIORITY_PREEMPTIVE;
@@ -75,8 +67,37 @@ bool uses_quantum() {
     return global_config.scheduler_type == SchedulerType::RR;
 }
 
-bool should_yield(int executed, bool preempt, bool quantum) {
-    if (quantum && executed >= global_config.quantum_cycles) return true;
-    if (preempt && !ready_queue.empty()) return true;
+bool should_yield(Process* current, int executed, bool preempt, bool quantum) {
+    if (quantum && executed >= global_config.quantum_cycles) {
+        return true;
+    }
+
+    if (preempt && !ready_queue.empty()) {
+        Process* next = nullptr;
+
+        {
+            std::lock_guard<std::mutex> lock(queue_mutex);
+
+            std::vector<Process*> temp;
+            while (!ready_queue.empty()) {
+                temp.push_back(ready_queue.front());
+                ready_queue.pop();
+            }
+
+            if (!temp.empty()) {
+                next = *std::min_element(temp.begin(), temp.end(),
+                    [](Process* a, Process* b) {
+                        return (a->priority == b->priority) ? a->id < b->id : a->priority < b->priority;
+                    });
+
+                for (Process* p : temp) ready_queue.push(p);
+            }
+        }
+
+        if (next && next->priority < current->priority) {
+            return true;
+        }
+    }
+
     return false;
 }

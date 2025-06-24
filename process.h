@@ -33,6 +33,7 @@ struct Process {
     std::vector<std::string> logs; // For storing output from PRINT
 
     int priority = 0; // lower value = higher priority
+    int last_core = -1;
 
     ProcessState state = ProcessState::READY;
     uint64_t sleep_until_tick = 0;

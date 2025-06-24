@@ -25,6 +25,7 @@ void cpu_core_worker(int core_id) {
         if (!process) continue;
 
         process->assigned_core = core_id;
+        process->last_core = core_id; 
         if (process->start_time.empty()) {
             process->start_time = get_timestamp();
         }
@@ -40,6 +41,16 @@ void cpu_core_worker(int core_id) {
 
         int exec_count = 0;
         while (process->program_counter < process->instructions.size() && system_running) {
+            exec_count++;
+            if (should_yield(process, exec_count, preempt, use_quantum)) {
+                {
+                    std::lock_guard<std::mutex> lock(queue_mutex);
+                    ready_queue.push(process);
+                }
+                process->assigned_core = -1;
+                break;
+            }
+
             if (process->state == ProcessState::WAITING) {
                 if (cpu_ticks < process->sleep_until_tick) {
                     {
@@ -51,7 +62,7 @@ void cpu_core_worker(int core_id) {
                 else {
                     process->state = ProcessState::RUNNING;
                 }
-            }
+            }         
 
             execute_instruction(process);
             process->program_counter++;
@@ -68,19 +79,7 @@ void cpu_core_worker(int core_id) {
                 process->assigned_core = -1;
                 break;
             }
-            else {
-                process->program_counter++;  // only advance if not requeued due to WAITING
-            }
-
-            exec_count++;
-            if (should_yield(exec_count, preempt, use_quantum)) {
-                {
-                    std::lock_guard<std::mutex> lock(queue_mutex);
-                    ready_queue.push(process);
-                }
-                process->assigned_core = -1;
-                break;
-            }
+           
         }
 
         if (process->program_counter >= process->instructions.size()) {

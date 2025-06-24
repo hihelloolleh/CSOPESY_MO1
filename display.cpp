@@ -1,10 +1,13 @@
-    // display.cpp
+// display.cpp
 
 #include "display.h"
 #include "shared_globals.h"
 #include <iostream>
-#include <iomanip> // For std::setw and std::left
-#include <cstdlib> // For system()
+#include <iomanip>     
+#include <mutex>       
+#include <vector>      
+#include <algorithm>   
+
 
 // Utility function to clear the console screen
 void clear_console() {
@@ -39,9 +42,11 @@ void generate_system_report(std::ostream& output_stream) {
             cores_used++;
         }
     }
-    
+
     int cores_available = global_config.num_cpu - cores_used;
-    int cpu_utilization = (global_config.num_cpu > 0) ? (static_cast<int>((static_cast<double>(cores_used) / global_config.num_cpu) * 100.0)) : 0;
+    int cpu_utilization = (global_config.num_cpu > 0)
+        ? static_cast<int>((static_cast<double>(cores_used) / global_config.num_cpu) * 100.0)
+        : 0;
 
     output_stream << "CPU utilization: " << cpu_utilization << "%\n";
     output_stream << "Cores used: " << cores_used << "\n";
@@ -52,24 +57,37 @@ void generate_system_report(std::ostream& output_stream) {
     for (const auto& p : process_list) {
         if (!p->finished) {
             output_stream << std::left << std::setw(12) << p->name
-                          << std::setw(25) << p->start_time
-                          << "Core: " << std::left << std::setw(5) << p->assigned_core
-                          << p->program_counter << " / " << p->instructions.size() << "\n";
+                << std::setw(25) << p->start_time
+                << "Core: " << std::left << std::setw(5) << p->assigned_core
+                << p->program_counter << " / " << p->instructions.size() << "\n";
         }
     }
     output_stream << "\n";
 
     output_stream << "Finished processes:\n";
+
+    // Collect and sort finished processes by end_time
+    std::vector<Process*> finished;
     for (const auto& p : process_list) {
-        if (p->finished) {
-            output_stream << std::left << std::setw(12) << p->name
-                          << std::setw(25) << p->end_time
-                          << std::left << std::setw(10) << "Finished"
-                          << p->instructions.size() << " / " << p->instructions.size() << "\n";
-        }
+        if (p->finished) finished.push_back(p);
     }
+
+    std::sort(finished.begin(), finished.end(), [](Process* a, Process* b) {
+        return a->end_time < b->end_time;
+        });
+
+    for (const auto& p : finished) {
+        output_stream << std::left << std::setw(12) << p->name
+            << std::setw(25) << p->end_time
+            << "Core: " << std::setw(5) << p->last_core
+            << std::left << std::setw(10) << "Finished"
+            << std::setw(14) << (std::to_string(p->instructions.size()) + " / " + std::to_string(p->instructions.size()))
+            << " Priority: " << p->priority << "\n";
+    }
+
     output_stream << "---------------------------------------------------------\n";
 }
+
 
 // Displays the detailed view for a single process for 'screen -s'
 void display_process_view(Process* process) {
