@@ -5,6 +5,8 @@
 #include <iostream>
 #include <random>
 #include <vector>
+#include <unordered_set>
+
 
 // --- Clock Implementation ---
 void clock_thread() {
@@ -18,55 +20,90 @@ void clock_thread() {
 
 Process* create_random_process() {
     static std::atomic<int> process_counter(0);
-    int max_priority = 100; 
     process_counter++;
 
     Process* p = new Process();
     p->id = process_counter;
     p->name = "p" + std::to_string(p->id);
-    p->priority = rand() % 100; 
+    p->priority = rand() % 100;
 
     int instruction_count = rand() % (global_config.max_ins - global_config.min_ins + 1) + global_config.min_ins;
 
-    // We will add more opcodes here as we implement them.
-    const std::vector<std::string> opcodes = {
-    "DECLARE", "ADD", "SUBTRACT", "PRINT", "SLEEP"
-    }; //added declare, add, subtract and print
+    std::unordered_set<std::string> declared_vars;
+    std::vector<Instruction> instructions;
 
-    for (int i = 0; i < instruction_count; ++i) {
+    auto declare_variable = [&](std::string var_name = "") {
+        if (var_name.empty()) {
+            var_name = "v" + std::to_string(rand() % 1000);
+            while (declared_vars.count(var_name))
+                var_name = "v" + std::to_string(rand() % 1000);
+        }
+
+        Instruction decl;
+        decl.opcode = "DECLARE";
+        decl.args = { var_name, std::to_string(rand() % 100) };
+        declared_vars.insert(var_name);
+        instructions.push_back(decl);
+        return var_name;
+        };
+
+    // Ensure at least two variables are declared first
+    while (declared_vars.size() < 2)
+        declare_variable();
+
+    const std::vector<std::string> op_pool = { "DECLARE", "ADD", "SUBTRACT", "PRINT", "SLEEP" };
+
+    while (instructions.size() < instruction_count) {
         Instruction inst;
-        inst.opcode = opcodes[rand() % opcodes.size()];
+        std::string opcode = op_pool[rand() % op_pool.size()];
+        std::vector<std::string> vars(declared_vars.begin(), declared_vars.end());
 
-        if (inst.opcode == "DECLARE") {
-            std::string var_name = "v" + std::to_string(rand() % 5);
-            int value = rand() % 100;
-            inst.args = { var_name, std::to_string(value) };
+        inst.opcode = opcode;
+
+        if (opcode == "DECLARE") {
+            declare_variable();
         }
-        else if (inst.opcode == "ADD" || inst.opcode == "SUBTRACT") {
-            std::string var1 = "v" + std::to_string(rand() % 5);
-            std::string operand1 = "v" + std::to_string(rand() % 5);
-            std::string operand2 = std::to_string(rand() % 50);  // Could be a value
-            inst.args = { var1, operand1, operand2 };
-        }
-        else if (inst.opcode == "PRINT") {
-            // 50% chance to print a variable or a plain message
+
+        else if ((opcode == "ADD" || opcode == "SUBTRACT") && vars.size() >= 2) {
+            // Ensure destination variable exists or declare it
+            std::string dest;
             if (rand() % 2 == 0) {
-                std::string var = "v" + std::to_string(rand() % 5);
+                dest = vars[rand() % vars.size()];
+            }
+            else {
+                dest = declare_variable();
+            }
+
+            std::string op2 = vars[rand() % vars.size()];
+            std::string op3 = (rand() % 2 == 0)
+                ? vars[rand() % vars.size()]
+                : std::to_string(rand() % 100); // immediate
+
+            inst.args = { dest, op2, op3 };
+        }
+
+        else if (inst.opcode == "PRINT") {
+            if (!vars.empty()) {
+                std::string var = vars[rand() % vars.size()];
                 inst.args = { "Value of " + var + ": ", var };
             }
             else {
                 inst.args = { "Hello world from ", p->name };
             }
         }
+
         else if (inst.opcode == "SLEEP") {
-            int ticks = rand() % 10 + 1;  // Sleep between 1 and 10 ticks
+            int ticks = rand() % 10 + 1;
             inst.args = { std::to_string(ticks) };
         }
 
-        p->instructions.push_back(inst);
+        instructions.push_back(inst);
     }
+
+    p->instructions = std::move(instructions);
     return p;
 }
+
     
     // std::cout << get_timestamp() << " [Generator] Created process " << p->name << " with " << instruction_count << " instructions." << std::endl;
     // The generation should happen silently in the background so it doesn't interrupt the user's console input.

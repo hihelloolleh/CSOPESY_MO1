@@ -1,4 +1,4 @@
-// display.cpp
+    // display.cpp
 
 #include "display.h"
 #include "shared_globals.h"

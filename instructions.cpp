@@ -2,6 +2,8 @@
 #include "shared_globals.h" // For get_timestamp()
 #include <iostream>
 #include <sstream>
+#include <cstdint>
+#include <algorithm> 
 
 // --- Forward declaration for our specific instruction handler ---
 void handle_print(Process* process, const Instruction& instr);
@@ -54,24 +56,22 @@ void handle_print(Process* process, const Instruction& instr) {
     formatted_log << get_timestamp() << " Core:" << process->assigned_core << " \"";
 
     for (const std::string& arg : instr.args) {
-        try {
-            auto it = process->variables.find(arg);
-            if (it != process->variables.end()) {
-                formatted_log << it->second;
-            }
-            else {
-                formatted_log << arg;
-            }
+        if (process->variables.count(arg)) {
+            formatted_log << process->variables[arg];
         }
-        catch (...) {
-            std::cerr << "[ERROR] Failed to format PRINT argument: " << arg << std::endl;
-            formatted_log << "[ERR]";
+        else if (arg[0] == 'v') {
+            process->variables[arg] = 0;
+            formatted_log << 0;
+        }
+        else {
+            formatted_log << arg;
         }
     }
 
     formatted_log << "\"";
     process->logs.push_back(formatted_log.str());
 }
+
 
 
 void handle_declare(Process* process, const Instruction& instr) {
@@ -87,31 +87,58 @@ void handle_declare(Process* process, const Instruction& instr) {
     }
 }
 
+bool is_number(const std::string& s) {
+    if (s.empty()) return false;
+    if (s[0] == '-' && s.size() > 1)
+        return std::all_of(s.begin() + 1, s.end(), ::isdigit);
+    return std::all_of(s.begin(), s.end(), ::isdigit);
+}
+
+int32_t get_value_or_default(Process* process, const std::string& arg) {
+    try {
+        if (process->variables.count(arg)) {
+            return process->variables[arg];
+        }
+        else if (std::isdigit(arg[0]) || arg[0] == '-') {
+            return std::stoi(arg); // Handles negative numbers
+        }
+        else {
+            // Auto-declare undefined variable as 0
+            process->variables[arg] = 0;
+            return 0;
+        }
+    }
+    catch (...) {
+        throw std::invalid_argument("Invalid numeric argument: " + arg);
+    }
+}
+
+
 
 void handle_add(Process* process, const Instruction& instr) {
     if (instr.args.size() != 3) return;
 
-    std::string dest = instr.args[0];
-    uint16_t val1 = 0;
-    uint16_t val2 = 0;
+    const std::string& dest = instr.args[0];
 
     try {
-        if (process->variables.find(instr.args[1]) != process->variables.end())
-            val1 = process->variables[instr.args[1]];
-        else
-            val1 = static_cast<uint16_t>(std::stoi(instr.args[1]));
+        uint16_t val1 = get_value_or_default(process, instr.args[1]);
+        uint16_t val2 = get_value_or_default(process, instr.args[2]);
 
-        if (process->variables.find(instr.args[2]) != process->variables.end())
-            val2 = process->variables[instr.args[2]];
-        else
-            val2 = static_cast<uint16_t>(std::stoi(instr.args[2]));
+        uint16_t result = std::min(static_cast<uint32_t>(val1) + val2, static_cast<uint32_t>(UINT16_MAX));
+        process->variables[dest] = result;
 
-        process->variables[dest] = std::min(static_cast<uint32_t>(val1) + val2, static_cast<uint32_t>(UINT16_MAX));
+        std::stringstream log;
+        log << get_timestamp() << " Core:" << process->assigned_core
+            << " ADD " << instr.args[1] << "(" << val1 << ") + "
+            << instr.args[2] << "(" << val2 << ") = " << result
+            << " -> " << dest;
+        process->logs.push_back(log.str());
+
     }
-    catch (...) {
+    catch (const std::exception& e) {
         std::cerr << "[ERROR] Invalid operands in ADD: ";
         for (const auto& arg : instr.args) std::cerr << arg << " ";
-        std::cerr << std::endl;
+        std::cerr << "| Reason: " << e.what() << std::endl;
     }
 }
 
@@ -119,30 +146,30 @@ void handle_add(Process* process, const Instruction& instr) {
 void handle_subtract(Process* process, const Instruction& instr) {
     if (instr.args.size() != 3) return;
 
-    std::string dest = instr.args[0];
-    uint16_t val1 = 0;
-    uint16_t val2 = 0;
+    const std::string& dest = instr.args[0];
 
     try {
-        if (process->variables.find(instr.args[1]) != process->variables.end())
-            val1 = process->variables[instr.args[1]];
-        else
-            val1 = static_cast<uint16_t>(std::stoi(instr.args[1]));
+        int32_t val1 = get_value_or_default(process, instr.args[1]);
+        int32_t val2 = get_value_or_default(process, instr.args[2]);
 
-        if (process->variables.find(instr.args[2]) != process->variables.end())
-            val2 = process->variables[instr.args[2]];
-        else
-            val2 = static_cast<uint16_t>(std::stoi(instr.args[2]));
+        int32_t result = val1 - val2;
+        process->variables[dest] = result;
 
-        int32_t result = static_cast<int32_t>(val1) - static_cast<int32_t>(val2);
-        process->variables[dest] = result < 0 ? 0 : static_cast<uint16_t>(result);
+        std::stringstream log;
+        log << get_timestamp() << " Core:" << process->assigned_core
+            << " SUBTRACT " << instr.args[1] << "(" << val1 << ") - "
+            << instr.args[2] << "(" << val2 << ") = " << result
+            << " -> " << dest;
+        process->logs.push_back(log.str());
     }
-    catch (...) {
+    catch (const std::exception& e) {
         std::cerr << "[ERROR] Invalid operands in SUBTRACT: ";
         for (const auto& arg : instr.args) std::cerr << arg << " ";
-        std::cerr << std::endl;
+        std::cerr << "| Reason: " << e.what() << std::endl;
     }
 }
+
+
 
 void handle_sleep(Process* process, const Instruction& instr) {
     if (instr.args.size() != 1) return;

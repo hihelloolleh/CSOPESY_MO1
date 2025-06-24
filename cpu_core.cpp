@@ -15,17 +15,11 @@ void cpu_core_worker(int core_id) {
             std::unique_lock<std::mutex> lock(queue_mutex);
             if (ready_queue.empty()) {
                 lock.unlock();
-                if (core_id == 0) {
-                    cpu_ticks++;
-                    std::this_thread::sleep_for(std::chrono::milliseconds(10));
-                }
-                else {
-                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
-                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
                 continue;
             }
 
-            process = select_process(); 
+            process = select_process();
         }
 
         if (!process) continue;
@@ -46,39 +40,45 @@ void cpu_core_worker(int core_id) {
 
         int exec_count = 0;
         while (process->program_counter < process->instructions.size() && system_running) {
-            // Skip if process is waiting
             if (process->state == ProcessState::WAITING) {
                 if (cpu_ticks < process->sleep_until_tick) {
-                    // Still sleeping, requeue and yield
-                    std::lock_guard<std::mutex> lock(queue_mutex);
-                    ready_queue.push(process);
+                    {
+                        std::lock_guard<std::mutex> lock(queue_mutex);
+                        ready_queue.push(process);
+                    }
                     break;
                 }
                 else {
-                    // Done sleeping
                     process->state = ProcessState::RUNNING;
                 }
             }
 
             execute_instruction(process);
+            process->program_counter++;
 
             for (int i = 0; i < global_config.delay_per_exec; ++i)
                 cpu_ticks++;
             cpu_ticks++;
 
-            // If the instruction was SLEEP, we must requeue now
             if (process->state == ProcessState::WAITING) {
-                std::lock_guard<std::mutex> lock(queue_mutex);
-                ready_queue.push(process);
+                {
+                    std::lock_guard<std::mutex> lock(queue_mutex);
+                    ready_queue.push(process);
+                }
+                process->assigned_core = -1;
                 break;
             }
+            else {
+                process->program_counter++;  // only advance if not requeued due to WAITING
+            }
 
-            process->program_counter++;
             exec_count++;
-
             if (should_yield(exec_count, preempt, use_quantum)) {
-                std::lock_guard<std::mutex> lock(queue_mutex);
-                ready_queue.push(process);
+                {
+                    std::lock_guard<std::mutex> lock(queue_mutex);
+                    ready_queue.push(process);
+                }
+                process->assigned_core = -1;
                 break;
             }
         }
@@ -86,6 +86,7 @@ void cpu_core_worker(int core_id) {
         if (process->program_counter >= process->instructions.size()) {
             process->end_time = get_timestamp();
             process->finished = true;
+            process->assigned_core = -1;
         }
 
         {
