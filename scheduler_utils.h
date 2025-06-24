@@ -2,6 +2,7 @@
 #define SCHEDULER_UTILS_H
 
 #include "shared_globals.h"
+#include "process.h"	
 
 
 Process* select_process();
