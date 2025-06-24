@@ -47,10 +47,6 @@ Process* create_random_process() {
         return var_name;
         };
 
-    // Ensure at least two variables are declared first
-    while (declared_vars.size() < 2)
-        declare_variable();
-
     const std::vector<std::string> op_pool = { "DECLARE", "ADD", "SUBTRACT", "PRINT", "SLEEP" };
 
     while (instructions.size() < instruction_count) {
@@ -64,20 +60,33 @@ Process* create_random_process() {
             declare_variable();
         }
 
-        else if ((opcode == "ADD" || opcode == "SUBTRACT") && vars.size() >= 2) {
-            // Ensure destination variable exists or declare it
+        else if (opcode == "ADD" || opcode == "SUBTRACT") {
+            // Always ensure dest exists (reuse or new)
             std::string dest;
-            if (rand() % 2 == 0) {
+            if (!vars.empty() && rand() % 2 == 0) {
                 dest = vars[rand() % vars.size()];
             }
             else {
                 dest = declare_variable();
+                vars.push_back(dest);
             }
 
-            std::string op2 = vars[rand() % vars.size()];
-            std::string op3 = (rand() % 2 == 0)
-                ? vars[rand() % vars.size()]
-                : std::to_string(rand() % 100); // immediate
+            std::string op2;
+            if (!vars.empty()) {
+                op2 = vars[rand() % vars.size()];
+            }
+            else {
+                op2 = declare_variable();
+                vars.push_back(op2);
+            }
+
+            std::string op3;
+            if (!vars.empty() && rand() % 2 == 0) {
+                op3 = vars[rand() % vars.size()];
+            }
+            else {
+                op3 = std::to_string(rand() % 100); // immediate
+            }
 
             inst.args = { dest, op2, op3 };
         }
