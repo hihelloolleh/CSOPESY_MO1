@@ -11,13 +11,15 @@
  * 
  * @param process A pointer to the process whose instruction is to be executed.
  */
-void execute_instruction(Process* process);
 
+
+void dispatch_instruction(Process* process, const Instruction& instr);
+void execute_instruction(Process* process);
 void handle_print(Process* process, const Instruction& instr);
 void handle_declare(Process* process, const Instruction& instr);
 void handle_add(Process* process, const Instruction& instr);
 void handle_subtract(Process* process, const Instruction& instr);
 void handle_sleep(Process* process, const Instruction& instr);
-//void handle_for(Process* process, const Instruction& instr);
+void handle_for(Process* process, const Instruction& instr);
 
 #endif // INSTRUCTIONS_H

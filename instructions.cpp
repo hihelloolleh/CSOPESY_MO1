@@ -11,37 +11,45 @@ void handle_print(Process* process, const Instruction& instr);
 
 // This is the main dispatcher function.
 void execute_instruction(Process* process) {
-    // Get the specific instruction we need to execute from the process's script
+    // First: check if inside a FOR loop
+    if (!process->for_stack.empty()) {
+        ForContext& ctx = process->for_stack.top();
+
+        // If we’ve completed all iterations, pop and continue to next main instruction
+        if (ctx.current_repeat >= ctx.repeat_count) {
+            process->for_stack.pop();
+            process->program_counter++; // Go to next instruction outside loop
+            return;
+        }
+
+        // If we finished one round, start the next one
+        if (ctx.current_instruction_index >= ctx.instructions.size()) {
+            ctx.current_instruction_index = 0;
+            ctx.current_repeat++;
+        }
+
+        // Execute next instruction in the loop
+        if (ctx.current_repeat < ctx.repeat_count && ctx.current_instruction_index < ctx.instructions.size()) {
+            const Instruction& loop_instr = ctx.instructions[ctx.current_instruction_index++];
+            dispatch_instruction(process, loop_instr);
+            return;
+        }
+
+        return; // wait until next tick if loop is "between states"
+    }
+
+    // Otherwise: execute normal instruction
+    if (process->program_counter >= process->instructions.size()) return;
+
     const Instruction& current_instruction = process->instructions[process->program_counter];
+    dispatch_instruction(process, current_instruction);
 
-    // Dispatch to the correct handler based on the opcode
-    if (current_instruction.opcode == "PRINT") {
-        handle_print(process, current_instruction);
+    // Don't increment if FOR — it will be handled inside
+    if (current_instruction.opcode != "FOR") {
+        process->program_counter++;
     }
-
-    else if (current_instruction.opcode == "DECLARE") {
-        handle_declare(process, current_instruction);
-    }
-
-    else if (current_instruction.opcode == "ADD") {
-        handle_add(process, current_instruction);
-    }
-
-    else if (current_instruction.opcode == "SUBTRACT") {
-        handle_subtract(process, current_instruction);
-    }
-    else if (current_instruction.opcode == "SLEEP") {
-        handle_sleep(process, current_instruction);
-    }
-
-
-    // else if (current_instruction.opcode == "ADD") {
-    //     handle_add(process, current_instruction); // To be implemented in the future
-    // }
-    // else if (current_instruction.opcode == "DECLARE") {
-    //     handle_declare(process, current_instruction); // To be implemented in the future
-    // }
 }
+
 
 
 /**
@@ -186,5 +194,48 @@ void handle_sleep(Process* process, const Instruction& instr) {
     }
     catch (...) {
         std::cerr << "[ERROR] Invalid operand in SLEEP: " << instr.args[0] << std::endl;
+    }
+}
+
+
+void handle_for(Process* process, const Instruction& instr) {
+    if (instr.args.size() != 1) return;
+
+    try {
+        int repeat_count = std::stoi(instr.args[0]);
+        if (repeat_count <= 0 || instr.sub_instructions.empty()) return;
+
+        ForContext context;
+        context.instructions = instr.sub_instructions;
+        context.repeat_count = repeat_count;
+        context.current_repeat = 0;
+        context.current_instruction_index = 0;
+
+        process->for_stack.push(context);
+        // DO NOT increment the program counter — loop control takes over
+    }
+    catch (...) {
+        std::cerr << "[ERROR] Invalid repeat count in FOR: " << instr.args[0] << std::endl;
+    }
+}
+
+void dispatch_instruction(Process* process, const Instruction& instr) {
+    if (instr.opcode == "PRINT") {
+        handle_print(process, instr);
+    }
+    else if (instr.opcode == "DECLARE") {
+        handle_declare(process, instr);
+    }
+    else if (instr.opcode == "ADD") {
+        handle_add(process, instr);
+    }
+    else if (instr.opcode == "SUBTRACT") {
+        handle_subtract(process, instr);
+    }
+    else if (instr.opcode == "SLEEP") {
+        handle_sleep(process, instr);
+    }
+    else if (instr.opcode == "FOR") {
+        handle_for(process, instr);
     }
 }

@@ -92,22 +92,83 @@ void enter_process_screen(const std::string& process_name, bool allow_create) {
             ss >> opcode;
 
             // Check if it's a valid Barebones instruction
-            if (opcode == "ADD" || opcode == "SUBTRACT" || opcode == "DECLARE" || opcode == "PRINT" || opcode == "SLEEP") {
+            if (opcode == "FOR") {
+                int repeat_count;
+                ss >> repeat_count;
+                if (repeat_count <= 0) {
+                    std::cout << "Invalid repeat count.\n";
+                    continue;
+                }
+
+                std::vector<Instruction> loop_body;
+                std::string loop_line;
+
+                std::cout << "Enter loop body (type ENDFOR to finish):\n";
+                while (true) {
+                    std::cout << ">> ";
+                    std::getline(std::cin, loop_line);
+                    if (loop_line == "ENDFOR") break;
+
+                    std::stringstream lss(loop_line);
+                    std::string sub_opcode;
+                    lss >> sub_opcode;
+
+                    Instruction sub_instr;
+                    sub_instr.opcode = sub_opcode;
+
+                    std::string arg;
+                    while (lss >> arg)
+                        sub_instr.args.push_back(arg);
+
+                    loop_body.push_back(sub_instr);
+                }
+
+                Instruction for_instr;
+                for_instr.opcode = "FOR";
+                for_instr.args = { std::to_string(repeat_count) };
+                for_instr.sub_instructions = loop_body;
+
+                target_process->instructions.push_back(for_instr);
+                std::cout << "Instructions in process:\n";
+                for (int i = 0; i < target_process->instructions.size(); ++i) {
+                    std::cout << i << ": " << target_process->instructions[i].opcode << "\n";
+                }
+
+                {
+                    std::lock_guard<std::mutex> lock(queue_mutex);
+                    ready_queue.push(target_process);
+                }
+                queue_cv.notify_one();
+            }
+            else if (
+                opcode == "DECLARE" || opcode == "ADD" || opcode == "SUBTRACT" ||
+                opcode == "PRINT" || opcode == "SLEEP"
+                ) {
                 Instruction instr;
                 instr.opcode = opcode;
 
                 std::string arg;
-                while (ss >> arg) {
+                while (ss >> arg)
                     instr.args.push_back(arg);
+
+                if (opcode == "SLEEP") {
+                    if (instr.args.empty() || !std::all_of(instr.args[0].begin(), instr.args[0].end(), ::isdigit)) {
+                        std::cout << "Invalid SLEEP duration.\n";
+                        continue;
+                    }
                 }
 
                 target_process->instructions.push_back(instr);
-                target_process->program_counter = static_cast<int>(target_process->instructions.size() - 1);
 
-                execute_instruction(target_process);
+                std::cout << "Instruction added: " << opcode << "\n";
+                {
+                    std::lock_guard<std::mutex> lock(queue_mutex);
+                    ready_queue.push(target_process);
+                }
+                queue_cv.notify_one();
             }
             else {
-                std::cout << "Unknown command in screen session. Only 'exit', 'process-smi', or a valid Barebones instruction (ADD, SUBTRACT, DECLARE, PRINT) are allowed.\n";
+                std::cout << "Unknown command. Only 'exit', 'process-smi', or a valid Barebones instruction (ADD, SUBTRACT, DECLARE, PRINT, SLEEP, FOR) are allowed.\n";
             }
         }
     }

@@ -19,6 +19,8 @@ void clock_thread() {
 }
 
 Process* create_random_process() {
+    int current_for_depth = 0;
+    const int max_for_depth = 3;
     static std::atomic<int> process_counter(0);
     process_counter++;
 
@@ -31,6 +33,8 @@ Process* create_random_process() {
 
     std::unordered_set<std::string> declared_vars;
     std::vector<Instruction> instructions;
+    std::vector<std::string> vars(declared_vars.begin(), declared_vars.end());
+
 
     auto declare_variable = [&](std::string var_name = "") {
         if (var_name.empty()) {
@@ -47,51 +51,30 @@ Process* create_random_process() {
         return var_name;
         };
 
-    const std::vector<std::string> op_pool = { "DECLARE", "ADD", "SUBTRACT", "PRINT", "SLEEP" };
+    const std::vector<std::string> op_pool = { "DECLARE", "ADD", "SUBTRACT", "PRINT", "SLEEP", "FOR"};
 
-    while (instructions.size() < instruction_count) {
+    auto generate_random_instruction = [&](std::vector<std::string>& vars) -> Instruction {
         Instruction inst;
-        std::string opcode = op_pool[rand() % op_pool.size()];
-        std::vector<std::string> vars(declared_vars.begin(), declared_vars.end());
+        std::string opcode = op_pool[rand() % (op_pool.size() - 1)]; // Exclude FOR for sub instructions
 
         inst.opcode = opcode;
 
         if (opcode == "DECLARE") {
-            declare_variable();
+            std::string new_var = declare_variable();
+            vars.push_back(new_var);
+            // `declare_variable` already adds to instructions.
+            inst = Instruction{}; // Skip further processing.
         }
 
         else if (opcode == "ADD" || opcode == "SUBTRACT") {
-            // Always ensure dest exists (reuse or new)
-            std::string dest;
-            if (!vars.empty() && rand() % 2 == 0) {
-                dest = vars[rand() % vars.size()];
-            }
-            else {
-                dest = declare_variable();
-                vars.push_back(dest);
-            }
-
-            std::string op2;
-            if (!vars.empty()) {
-                op2 = vars[rand() % vars.size()];
-            }
-            else {
-                op2 = declare_variable();
-                vars.push_back(op2);
-            }
-
-            std::string op3;
-            if (!vars.empty() && rand() % 2 == 0) {
-                op3 = vars[rand() % vars.size()];
-            }
-            else {
-                op3 = std::to_string(rand() % 100); // immediate
-            }
+            std::string dest = !vars.empty() ? vars[rand() % vars.size()] : declare_variable();
+            std::string op2 = !vars.empty() ? vars[rand() % vars.size()] : declare_variable();
+            std::string op3 = (rand() % 2 == 0 && !vars.empty()) ? vars[rand() % vars.size()] : std::to_string(rand() % 100);
 
             inst.args = { dest, op2, op3 };
         }
 
-        else if (inst.opcode == "PRINT") {
+        else if (opcode == "PRINT") {
             if (!vars.empty()) {
                 std::string var = vars[rand() % vars.size()];
                 inst.args = { "Value of " + var + ": ", var };
@@ -101,13 +84,47 @@ Process* create_random_process() {
             }
         }
 
-        else if (inst.opcode == "SLEEP") {
-            int ticks = rand() % 10 + 1;
-            inst.args = { std::to_string(ticks) };
+        else if (opcode == "SLEEP") {
+            inst.args = { std::to_string(rand() % 10 + 1) };
         }
 
-        instructions.push_back(inst);
+        return inst;
+        };
+
+
+    while (instructions.size() < instruction_count) {
+        std::string opcode = op_pool[rand() % op_pool.size()];
+
+        if (opcode == "FOR" && current_for_depth < max_for_depth) {
+            Instruction for_instr;
+            for_instr.opcode = "FOR";
+            int repeat_count = rand() % 4 + 2;
+            for_instr.args = { std::to_string(repeat_count) };
+
+            current_for_depth++;  // Increase depth
+
+            int sub_instr_count = rand() % 3 + 1;
+            for (int i = 0; i < sub_instr_count; ++i) {
+                Instruction sub = generate_random_instruction(vars);
+
+                // OPTIONAL: Prevent nested FOR inside another FOR
+                if (sub.opcode != "FOR" && !sub.opcode.empty()) {
+                    for_instr.sub_instructions.push_back(sub);
+                }
+            }
+
+            current_for_depth--;  // Done with this FOR
+
+            instructions.push_back(for_instr);
+        }
+        else {
+            Instruction inst = generate_random_instruction(vars);
+            if (!inst.opcode.empty()) {
+                instructions.push_back(inst);
+            }
+        }
     }
+
 
     p->instructions = std::move(instructions);
     return p;
