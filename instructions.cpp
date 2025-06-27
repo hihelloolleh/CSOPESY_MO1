@@ -15,7 +15,7 @@ void execute_instruction(Process* process) {
     if (!process->for_stack.empty()) {
         ForContext& ctx = process->for_stack.top();
 
-        // If we’ve completed all iterations, pop and continue to next main instruction
+        // If completed all iterations, pop and continue to next main instruction
         if (ctx.current_repeat >= ctx.repeat_count) {
             process->for_stack.pop();
             process->program_counter++; // Go to next instruction outside loop
@@ -38,13 +38,13 @@ void execute_instruction(Process* process) {
         return; // wait until next tick if loop is "between states"
     }
 
-    // Otherwise: execute normal instruction
+    // execute normal instruction
     if (process->program_counter >= process->instructions.size()) return;
 
     const Instruction& current_instruction = process->instructions[process->program_counter];
     dispatch_instruction(process, current_instruction);
 
-    // Don't increment if FOR — it will be handled inside
+    // Don't increment if FOR it will be handled inside
     if (current_instruction.opcode != "FOR") {
         process->program_counter++;
     }
@@ -211,8 +211,23 @@ void handle_for(Process* process, const Instruction& instr) {
         context.current_repeat = 0;
         context.current_instruction_index = 0;
 
+        // Log FOR instruction contents
+        std::stringstream log;
+        log << get_timestamp() << " Core:" << process->assigned_core
+            << " FOR " << repeat_count << "x with instructions:";
+
+        for (const Instruction& sub_instr : instr.sub_instructions) {
+            log << " [" << sub_instr.opcode;
+            for (const std::string& arg : sub_instr.args) {
+                log << " " << arg;
+            }
+            log << "]";
+        }
+
+        process->logs.push_back(log.str());
+
         process->for_stack.push(context);
-        // DO NOT increment the program counter — loop control takes over
+        // DO NOT increment the program counter loop control takes over
     }
     catch (...) {
         std::cerr << "[ERROR] Invalid repeat count in FOR: " << instr.args[0] << std::endl;
