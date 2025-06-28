@@ -8,7 +8,7 @@ WANGKAY, JEANTE (S13)<br>
 1. Type this command into the terminal to build the program. <br>
    **windows:** `g++ -std=c++17 config.cpp cpu_core.cpp display.cpp instructions.cpp main.cpp scheduler_utils.cpp scheduler.cpp shared_globals.cpp -o csopesy_emu.exe` <br>
    **mac:** `g++ -std=c++17 -pthread -o csopesy_emu *.cpp`
-3. Afterwards, type `csopesy_emu_exe` to run the program.
+3. Afterwards, type `csopesy_emu.exe` to run the program.
 4. Type `initialize` to initialize the program.
 5. You may now input the other commands accordingly. 
 
