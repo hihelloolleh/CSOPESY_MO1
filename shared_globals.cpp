@@ -17,6 +17,9 @@ std::atomic<bool> is_initialized(false);
 // --- Configuration Definition ---
 Config global_config;
 
+// --- Memory Management Definitions ---
+MemoryManager* global_mem_manager = nullptr;
+
 // --- Process Management Definitions ---
 std::mutex queue_mutex;
 std::condition_variable queue_cv;

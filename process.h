@@ -37,13 +37,16 @@ struct Process {
     int program_counter = 0;
     std::map<std::string, uint16_t> variables;
 
+    std::vector<int> insPages; 
+    std::vector<int> varPages;
+
     int assigned_core = -1;
     bool finished = false;
     std::string start_time;
     std::string end_time;
-    std::vector<std::string> logs; // For storing output from PRINT
+    std::vector<std::string> logs;
 
-    int priority = 0; // lower value = higher priority
+    int priority = 0;
     int last_core = -1;
 
     ProcessState state = ProcessState::READY;
@@ -51,6 +54,12 @@ struct Process {
 
     std::stack<ForContext> for_stack;
 
+    Process() : id(0), name("") {}
+
+    Process(int pid_, const std::string& name_)
+        : id(pid_), name(name_) {
+    }
 };
+
 
 #endif // PROCESS_H

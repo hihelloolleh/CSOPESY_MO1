@@ -24,6 +24,18 @@ void cpu_core_worker(int core_id) {
 
         if (!process) continue;
 
+        if (global_mem_manager->getProcess(process->id) == nullptr) {
+            if (!global_mem_manager->createProcess(*process, global_config.mem_per_proc)) {
+                
+                {
+                    std::lock_guard<std::mutex> lock(queue_mutex);
+                    ready_queue.push(process);
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(5));
+                continue;
+            }
+        }
+
         process->assigned_core = core_id;
         process->last_core = core_id; 
         if (process->start_time.empty()) {
@@ -42,6 +54,7 @@ void cpu_core_worker(int core_id) {
         int exec_count = 0;
         while (process->program_counter < process->instructions.size() && system_running) {
             exec_count++;
+
             if (should_yield(process, exec_count, preempt, use_quantum)) {
                 {
                     std::lock_guard<std::mutex> lock(queue_mutex);
@@ -62,30 +75,34 @@ void cpu_core_worker(int core_id) {
                 else {
                     process->state = ProcessState::RUNNING;
                 }
-            }         
+            }
 
             execute_instruction(process);
             process->program_counter++;
 
-            for (int i = 0; i < global_config.delay_per_exec; ++i)
-                cpu_ticks++;
-            cpu_ticks++;
-
+            // Instead of just incrementing cpu_ticks, simulate real time:
             if (process->state == ProcessState::WAITING) {
                 {
                     std::lock_guard<std::mutex> lock(queue_mutex);
                     ready_queue.push(process);
                 }
                 process->assigned_core = -1;
-                break;
+                break;  // Do NOT advance program_counter
             }
-           
+
+            process->program_counter++;
+
+            std::this_thread::sleep_for(std::chrono::milliseconds(global_config.delay_per_exec));
+            cpu_ticks++;
         }
+
 
         if (process->program_counter >= process->instructions.size()) {
             process->end_time = get_timestamp();
             process->finished = true;
             process->assigned_core = -1;
+
+            global_mem_manager->removeProcess(process->id);
         }
 
         {

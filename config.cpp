@@ -11,6 +11,10 @@ const int DEFAULT_MIN_INS = 1000;
 const int DEFAULT_MAX_INS = 2000;
 const int DEFAULT_DELAY_PER_EXEC = 0;
 const char* const DEFAULT_SCHEDULER = "rr";
+const int DEFAULT_MAX_OVERALL_MEM = 16384;
+const int DEFAULT_MEM_PER_FRAME = 16;
+const int DEFAULT_MEM_PER_PROC = 4096;
+
 
 bool loadConfiguration(const std::string& filepath, Config& config) {
     std::ifstream configFile(filepath);
@@ -47,6 +51,10 @@ bool loadConfiguration(const std::string& filepath, Config& config) {
         else if (key == "min-ins") ss >> config.min_ins;
         else if (key == "max-ins") ss >> config.max_ins;
         else if (key == "delay-per-exec") ss >> config.delay_per_exec;
+        else if (key == "max-overall-mem") ss >> config.max_overall_mem;
+        else if (key == "mem-per-frame") ss >> config.mem_per_frame;
+        else if (key == "mem-per-proc") ss >> config.mem_per_proc;
+
     }
 
     configFile.close();
@@ -116,6 +124,25 @@ bool correctAndValidateConfig(Config& config) {
         config.delay_per_exec = DEFAULT_DELAY_PER_EXEC;
         corrected = true;
     }
+
+    if (config.max_overall_mem <= 0) {
+        std::cerr << "Correcting max-overall-mem to " << DEFAULT_MAX_OVERALL_MEM << "\n";
+        config.max_overall_mem = DEFAULT_MAX_OVERALL_MEM;
+        corrected = true;
+    }
+
+    if (config.mem_per_frame <= 0) {
+        std::cerr << "Correcting mem-per-frame to " << DEFAULT_MEM_PER_FRAME << "\n";
+        config.mem_per_frame = DEFAULT_MEM_PER_FRAME;
+        corrected = true;
+    }
+
+    if (config.mem_per_proc <= 0) {
+        std::cerr << "Correcting mem-per-proc to " << DEFAULT_MEM_PER_PROC << "\n";
+        config.mem_per_proc = DEFAULT_MEM_PER_PROC;
+        corrected = true;
+    }
+
 
     return corrected;
 }
