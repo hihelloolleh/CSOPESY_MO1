@@ -32,6 +32,9 @@ struct Config {
     int min_ins = 0;
     int max_ins = 0;
     int delay_per_exec = 0;
+    int max_overall_mem = 0;
+    int mem_per_frame = 0;
+    int mem_per_proc = 0;
 };
 
 bool loadConfiguration(const std::string& filepath, Config& config);

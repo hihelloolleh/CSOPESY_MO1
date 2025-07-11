@@ -3,6 +3,7 @@
 
 #include "config.h"
 #include "process.h"
+#include "mem_manager.h"
 #include <mutex>
 #include <condition_variable>
 #include <queue>
@@ -22,6 +23,9 @@ extern std::atomic<bool> is_initialized;
 
 // --- Configuration ---
 extern Config global_config;
+
+// --- Memory Management ---
+extern MemoryManager* global_mem_manager;
 
 // --- Process Management ---
 extern std::mutex queue_mutex;

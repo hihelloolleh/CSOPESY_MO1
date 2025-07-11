@@ -18,6 +18,9 @@
 #include "scheduler.h"
 #include "display.h"
 #include "instructions.h"
+#include "process.h"
+#include "mem_manager.h"
+   
 
 // A vector to hold our CPU worker threads so we can manage them during shutdown.
 std::vector<std::thread> cpu_worker_threads;
@@ -226,11 +229,14 @@ void cli_loop() {
 
         if (!is_initialized) {
             if (command == "initialize") {
-                if (loadConfiguration("config.txt", global_config)) {
+                if (loadConfiguration("config.txt", global_config)) {       
+                    global_mem_manager = new MemoryManager(global_config);
                     is_initialized = true;
                     std::cout << "System initialized successfully from config.txt." << std::endl;
                     std::cout << "Scheduling Algorithm: " << get_scheduler_name(global_config.scheduler_type) << "\n";
                     start_cpu_cores();
+
+                    std::thread(process_generator_thread).detach();
                 } else {
                     std::cerr << "Initialization FAILED. Please check config.txt and try again." << std::endl;
                 }
@@ -294,7 +300,7 @@ void cli_loop() {
 
 int main() {
     srand(static_cast<unsigned int>(time(nullptr))); 
-    std::thread generator_thread(process_generator_thread);
+
     std::thread master_clock_thread(clock_thread);
 
     cli_loop();
@@ -302,7 +308,7 @@ int main() {
     std::cout << "\nShutdown initiated. Waiting for background threads to complete..." << std::endl;
     
     if (master_clock_thread.joinable()) master_clock_thread.join();
-    if (generator_thread.joinable()) generator_thread.join();
+
     for (auto& t : cpu_worker_threads) {
         if (t.joinable()) {
             t.join();
@@ -314,6 +320,11 @@ int main() {
         delete p;
     }
     process_list.clear();
+
+    if (global_mem_manager) {
+        delete global_mem_manager;
+        global_mem_manager = nullptr;
+    }
     
     std::cout << "Shutdown complete. Goodbye!" << std::endl;
     return 0;

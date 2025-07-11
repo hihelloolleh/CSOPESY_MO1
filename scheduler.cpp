@@ -1,5 +1,6 @@
 #include "scheduler.h"
 #include "shared_globals.h"
+#include "mem_manager.h"
 #include <thread>
 #include <chrono>
 #include <iostream>
@@ -127,6 +128,19 @@ Process* create_random_process() {
 
 
     p->instructions = std::move(instructions);
+
+    int varsPerPage = 1; // 1 variable per page (adjust based on real size)
+    int insPerPage = 1;  // 1 instruction per page
+
+    int varPageCount = (declared_vars.size() + varsPerPage - 1) / varsPerPage;
+    int insPageCount = (instruction_count + insPerPage - 1) / insPerPage;
+
+    for (int i = 0; i < insPageCount; ++i)
+        p->insPages.push_back(i);
+
+    for (int i = 0; i < varPageCount; ++i)
+        p->varPages.push_back(insPageCount + i);
+
     return p;
 }
 
@@ -141,23 +155,34 @@ void process_generator_thread() {
     while (system_running) {
         if (generating_processes) {
             uint64_t current_tick = cpu_ticks.load();
-            // Check if enough time has passed since the last generation
-            // The check 'global_config.batch_process_freq > 0' prevents a divide-by-zero error if the value is 0.
-            if (global_config.batch_process_freq > 0 && current_tick > last_gen_tick && current_tick % global_config.batch_process_freq == 0) {
-                last_gen_tick = current_tick; // Update the last generation time
-                
+
+            // Ensure generation frequency is valid
+            if (global_config.batch_process_freq > 0 &&
+                current_tick > last_gen_tick &&
+                current_tick % global_config.batch_process_freq == 0) {
+
+                last_gen_tick = current_tick;
+
                 Process* new_proc = create_random_process();
-                
+
+                if (!global_mem_manager->createProcess(*new_proc, global_config.mem_per_proc)) {
+                    std::cout << "Memory full. Process " << new_proc->name << " will be re-queued.\n";
+                    std::lock_guard<std::mutex> lock(queue_mutex);
+                    ready_queue.push(new_proc); // Requeue to tail
+                    continue;
+                }
+
+
                 {
                     std::lock_guard<std::mutex> lock(queue_mutex);
-                    process_list.push_back(new_proc); // Add to the master list
-                    ready_queue.push(new_proc);       // Add to the line for the CPUs
+                    process_list.push_back(new_proc);
+                    ready_queue.push(new_proc);
                 }
-                queue_cv.notify_one(); // Tell a waiting CPU core there's a new job
+
+                queue_cv.notify_one(); // Tell a CPU core there's work
             }
         }
 
-        // Sleep for a short time to prevent this thread from using 100% CPU
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
 }

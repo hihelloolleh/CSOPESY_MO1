@@ -24,6 +24,18 @@ void cpu_core_worker(int core_id) {
 
         if (!process) continue;
 
+        if (global_mem_manager->getProcess(process->id) == nullptr) {
+            if (!global_mem_manager->createProcess(*process, global_config.mem_per_proc)) {
+                
+                {
+                    std::lock_guard<std::mutex> lock(queue_mutex);
+                    ready_queue.push(process);
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(5));
+                continue;
+            }
+        }
+
         process->assigned_core = core_id;
         process->last_core = core_id; 
         if (process->start_time.empty()) {
@@ -86,6 +98,8 @@ void cpu_core_worker(int core_id) {
             process->end_time = get_timestamp();
             process->finished = true;
             process->assigned_core = -1;
+
+            global_mem_manager->removeProcess(process->id);
         }
 
         {
