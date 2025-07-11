@@ -52,7 +52,7 @@ void enter_process_screen(const std::string& process_name, bool allow_create) {
 
 	// If process finished cant load
     if (target_process && target_process->finished) {
-        std::cout << "Process <" << process_name << "> has finished execution. Cannot access.\n";
+        std::cout << "Process <" << process_name << "> has finished execution. Opening in read-only view.\n";
         return;
     }
 
@@ -93,6 +93,11 @@ void enter_process_screen(const std::string& process_name, bool allow_create) {
             std::stringstream ss(process_command);
             std::string opcode;
             ss >> opcode;
+
+            if (target_process->finished && process_command != "exit" && process_command != "process-smi") {
+                std::cout << "Process has finished execution. Cannot modify instructions. Only 'exit' and 'process-smi' are allowed.\n";
+                continue;
+            }
 
             // Check if it's a valid Barebones instruction
             if (opcode == "FOR") {
