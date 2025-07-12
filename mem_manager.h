@@ -23,6 +23,7 @@ public:
 
     void showProcessSMI();
     void showVMStat();
+    void snapshotMemory(int quantumCycle);
 
 private:
     size_t totalMemory;
@@ -44,4 +45,8 @@ private:
     int getFreeFrameOrEvict();
     void pageIn(PCB& pcb, Page& page);
     void pageOut(int frameIndex);
+    
 };
+
+
+

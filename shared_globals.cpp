@@ -2,7 +2,7 @@
 #include <chrono>
 #include <iomanip>
 #include <sstream>
-#include "shared_globals.h"
+
 
 // --- System Clock Definition ---
 std::atomic<uint64_t> cpu_ticks(0);
@@ -43,3 +43,5 @@ std::string get_timestamp() {
     ss << std::put_time(&local_tm, "(%m/%d/%Y %I:%M:%S%p)");
     return ss.str();
 }
+
+std::atomic<int> global_quantum_cycle = 0; //Quantum Cycle

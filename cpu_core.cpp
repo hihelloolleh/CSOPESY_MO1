@@ -55,12 +55,21 @@ void cpu_core_worker(int core_id) {
         while (process->program_counter < process->instructions.size() && system_running) {
             exec_count++;
 
-            if (should_yield(process, exec_count, preempt, use_quantum)) {
+            bool should_yield_now = should_yield(process, exec_count, preempt, use_quantum);
+            if (should_yield_now) {
+                if (global_mem_manager) {
+                    global_quantum_cycle++;
+                    if (global_quantum_cycle % SNAPSHOT_INTERVAL == 0) {
+                        global_mem_manager->snapshotMemory(global_quantum_cycle);
+                    }
+                }
+
                 {
                     std::lock_guard<std::mutex> lock(queue_mutex);
                     ready_queue.push(process);
                 }
                 process->assigned_core = -1;
+
                 break;
             }
 

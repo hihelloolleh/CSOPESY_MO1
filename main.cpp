@@ -10,6 +10,12 @@
 #include <ctime>
 #include <fstream>
 #include <chrono> // For std::this_thread::sleep_for
+#ifdef _WIN32
+#include <direct.h>
+#else
+#include <sys/stat.h>
+#include <sys/types.h>
+#endif
 
 // --- Project-Specific Headers ---
 #include "shared_globals.h"
@@ -307,6 +313,19 @@ int main() {
     srand(static_cast<unsigned int>(time(nullptr))); 
 
     std::thread master_clock_thread(clock_thread);
+    // Create 'snapshots' folder if it does not exist
+#ifdef _WIN32
+    struct _stat st = { 0 };
+    if (_stat("snapshots", &st) == -1) {
+        _mkdir("snapshots");
+    }
+#else
+    struct stat st = { 0 };
+    if (stat("snapshots", &st) == -1) {
+        mkdir("snapshots", 0700);
+    }
+#endif
+
 
     cli_loop();
 

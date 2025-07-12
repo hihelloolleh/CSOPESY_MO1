@@ -4,6 +4,7 @@
 #include "config.h"
 #include "process.h"
 #include "mem_manager.h"
+#include "cpu_core.h"
 #include <mutex>
 #include <condition_variable>
 #include <queue>
@@ -36,5 +37,9 @@ extern std::vector<bool> core_busy; // Track which cores are currently busy
 
 // --- Utility ---
 std::string get_timestamp();
+
+// Quantum Cycle
+extern std::atomic<int> global_quantum_cycle;
+constexpr int SNAPSHOT_INTERVAL = 100;
 
 #endif // SHARED_GLOBALS_H

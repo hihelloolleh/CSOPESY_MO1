@@ -6,6 +6,10 @@
 #include <iostream>
 #include <iomanip>
 #include <cstring>
+#include <sstream>    // For std::ostringstream
+#include <fstream>    // For std::ofstream
+#include <iomanip>    // For std::setw, std::setfill
+#include <ctime>      // For std::time_t, std::time, std::ctime
 
 
 MemoryManager::MemoryManager(const Config& config)
@@ -193,4 +197,54 @@ void MemoryManager::showVMStat() {
     std::cout << "Free memory: " << (totalFrames - used) * frameSize << " bytes\n";
     std::cout << "Page faults: " << pageFaults << "\n";
     std::cout << "Page evictions: " << pageEvictions << "\n";
+}
+
+void MemoryManager::snapshotMemory(int quantumCycle) {
+    std::ostringstream filename;
+    filename << "snapshots/memory_stamp_" << std::setw(2) << std::setfill('0') << quantumCycle << ".txt";
+    std::ofstream out(filename.str());
+
+    if (!out.is_open()) {
+        std::cerr << "[mem-manager] Failed to create " << filename.str() << "\n";
+        return;
+    }
+
+    // Timestamp
+    std::time_t now = std::time(nullptr);
+    out << "Timestamp: " << std::ctime(&now);  // includes newline
+
+    // Number of processes in memory
+    out << "Number of processes in memory: " << processTable.size() << "\n";
+
+    // External fragmentation calculation
+    // External fragmentation = free frames * frameSize (since contiguous not required in paging, we treat total free as fragmentation here if required)
+    size_t freeFrames = 0;
+    for (bool occupied : frameOccupied)
+        if (!occupied) ++freeFrames;
+
+    size_t externalFragKB = (freeFrames * frameSize) / 1024;
+    out << "Total external fragmentation: " << externalFragKB << " KB\n";
+
+    // ASCII memory layout
+    out << "Memory Layout:\n";
+    for (size_t i = 0; i < totalFrames; ++i) {
+        if (frameOccupied[i]) {
+            // Find which process/page owns this frame
+            for (const auto& entry : processTable) {
+                const PCB& pcb = entry.second;
+                for (const auto& page : pcb.pageTable) {
+                    if (page.valid && page.frameIndex == static_cast<int>(i)) {
+                        size_t lower = i * frameSize;
+                        size_t upper = (i + 1) * frameSize - 1;
+                        out << "[" << std::setw(5) << std::setfill('0') << lower
+                            << " - " << std::setw(5) << std::setfill('0') << upper
+                            << "] P" << page.processId << " Pg#" << page.pageNumber << "\n";
+                    }
+                }
+            }
+        }
+    }
+
+    out.close();
+    std::cout << "[mem-manager] Snapshot saved to " << filename.str() << "\n";
 }
