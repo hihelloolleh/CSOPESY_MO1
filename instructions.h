@@ -2,6 +2,7 @@
 #define INSTRUCTIONS_H
 
 #include "process.h" // We need the definition of a Process
+#include "shared_globals.h" // For global_mem_manager
 
 /**
  * @brief The main dispatcher for executing an instruction.
@@ -21,5 +22,10 @@ void handle_add(Process* process, const Instruction& instr);
 void handle_subtract(Process* process, const Instruction& instr);
 void handle_sleep(Process* process, const Instruction& instr);
 void handle_for(Process* process, const Instruction& instr);
+
+// Add new helper functions for memory interaction
+uint16_t get_or_assign_variable_virtual_address(Process* process, const std::string& var_name);
+uint16_t read_variable_value(Process* process, const std::string& arg);
+void write_variable_value(Process* process, const std::string& dest_var_name, uint16_t value);
 
 #endif // INSTRUCTIONS_H

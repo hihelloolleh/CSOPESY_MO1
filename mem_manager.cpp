@@ -3,7 +3,7 @@
 #include "page.h"
 #include "process.h"
 #include "config.h"
-#include "shared_globals.h" // <--- THIS IS THE MISSING INCLUDE!
+#include "shared_globals.h" // <--- IMPORTANT: This include was the cause of the previous error.
 #include <iostream>
 #include <iomanip>
 #include <cstring>
@@ -298,13 +298,11 @@ void MemoryManager::snapshotMemory(int quantumCycle) {
         const PCB& pcb = entry.second;
         
         int min_frame_idx = -1; // Initialize to an invalid index
-        int max_frame_idx = -1; // Initialize to an invalid index
-
-        // Iterate through all pages belonging to the current process
+        int max_frame_idx = -1; // Initialize to an "empty" value
+        
+        // Find the min and max frame indices occupied by pages of this process
         for (const auto& page : pcb.pageTable) {
-            // Check if the page is valid (in memory) and has a valid frame index
             if (page.valid && page.frameIndex >= 0 && static_cast<size_t>(page.frameIndex) < frameOccupied.size()) {
-                // Update the minimum and maximum frame indices for this process
                 if (min_frame_idx == -1 || page.frameIndex < min_frame_idx) {
                     min_frame_idx = page.frameIndex;
                 }

@@ -3,9 +3,9 @@
 
 #include <string>
 #include <vector>
-#include <map>
-#include <cstdint> // For uint16_t
-#include <stack> //For FOR
+#include <map>      // Now for mapping variable names to virtual addresses
+#include <cstdint>  // For uint16_t
+#include <stack>    // For FOR loop context
 #include <algorithm>
 
 struct Instruction {
@@ -35,7 +35,11 @@ struct Process {
 
     std::vector<Instruction> instructions;
     int program_counter = 0;
-    std::map<std::string, uint16_t> variables;
+    // REMOVE THIS: std::map<std::string, uint16_t> variables;
+    
+    // ADD THIS: Map variable names to their virtual memory addresses (offsets within the process's 4096-byte space)
+    std::map<std::string, uint16_t> variable_virtual_addresses;
+    uint16_t next_available_variable_address = 0; // Tracks the next available virtual address for a new variable
 
     std::vector<int> insPages; 
     std::vector<int> varPages;
