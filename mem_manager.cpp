@@ -10,9 +10,8 @@
 #include <fstream>    
 #include <ctime>      
 #include <chrono>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <direct.h>
+#include <filesystem>
+namespace fs = std::filesystem;
 
 
 
@@ -249,7 +248,7 @@ void MemoryManager::snapshotMemory(int quantumCycle) {
                     size_t lower = i * frameSize;
                     size_t upper = (i + 1) * frameSize;
                     blocks.push_back({ upper, "P" + std::to_string(page.processId), lower });
-                    goto next_frame; // Once matched, skip checking other processes
+                    goto next_frame;
                 }
             }
         }
@@ -285,11 +284,9 @@ void MemoryManager::snapshotMemory(int quantumCycle) {
 
     // Ensure directory exists
     std::string folder = "snapshots";
-#if defined(_WIN32)
-    _mkdir(folder.c_str());
-#else
-    mkdir(folder.c_str(), 0777);
-#endif
+    if (!fs::exists(folder)) {
+        fs::create_directory(folder);
+    }
 
     // Async write to file
     std::string fileName = folder + "/memory_stamp_" + std::to_string(quantumCycle) + ".txt";
