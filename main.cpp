@@ -346,9 +346,11 @@ int main() {
     process_list.clear();
 
     if (global_mem_manager) {
+        global_mem_manager->flushAsyncWrites();
         delete global_mem_manager;
         global_mem_manager = nullptr;
     }
+
     
     std::cout << "Shutdown complete. Goodbye!" << std::endl;
     return 0;

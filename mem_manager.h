@@ -4,6 +4,8 @@
 #include <queue>
 #include <fstream>
 #include <cstdint>
+#include <mutex>
+#include <future>
 #include "page.h"
 #include "pcb.h"
 #include "process.h"
@@ -24,6 +26,13 @@ public:
     void showProcessSMI();
     void showVMStat();
     void snapshotMemory(int quantumCycle);
+    void flushAsyncWrites();
+
+    mutable std::mutex snapshot_mutex;
+    std::vector<std::string> snapshot_log;
+    std::string last_snapshot_signature;
+    std::vector<std::future<void>> background_tasks;
+
 
 private:
     size_t totalMemory;

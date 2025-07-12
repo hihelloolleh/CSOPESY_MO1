@@ -59,9 +59,8 @@ void cpu_core_worker(int core_id) {
             if (should_yield_now) {
                 if (global_mem_manager) {
                     global_quantum_cycle++;
-                    if (global_quantum_cycle % SNAPSHOT_INTERVAL == 0) {
-                        global_mem_manager->snapshotMemory(global_quantum_cycle);
-                    }
+                    global_mem_manager->snapshotMemory(global_quantum_cycle);
+
                 }
 
                 {
@@ -98,8 +97,6 @@ void cpu_core_worker(int core_id) {
                 process->assigned_core = -1;
                 break;  // Do NOT advance program_counter
             }
-
-            process->program_counter++;
 
             std::this_thread::sleep_for(std::chrono::milliseconds(global_config.delay_per_exec));
             cpu_ticks++;

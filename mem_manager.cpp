@@ -6,10 +6,14 @@
 #include <iostream>
 #include <iomanip>
 #include <cstring>
-#include <sstream>    // For std::ostringstream
-#include <fstream>    // For std::ofstream
-#include <iomanip>    // For std::setw, std::setfill
-#include <ctime>      // For std::time_t, std::time, std::ctime
+#include <sstream>    
+#include <fstream>    
+#include <ctime>      
+#include <chrono>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <direct.h>
+
 
 
 MemoryManager::MemoryManager(const Config& config)
@@ -138,7 +142,7 @@ void MemoryManager::pageIn(PCB& pcb, Page& page) {
 
     page.frameIndex = frameIndex;
     page.valid = true;
-    ++pageFaults;
+    pageFaults++;
 }
 
 void MemoryManager::pageOut(int frameIndex) {
@@ -200,51 +204,112 @@ void MemoryManager::showVMStat() {
 }
 
 void MemoryManager::snapshotMemory(int quantumCycle) {
-    std::ostringstream filename;
-    filename << "snapshots/memory_stamp_" << std::setw(2) << std::setfill('0') << quantumCycle << ".txt";
-    std::ofstream out(filename.str());
+    if (processTable.empty()) return;
 
-    if (!out.is_open()) {
-        std::cerr << "[mem-manager] Failed to create " << filename.str() << "\n";
-        return;
-    }
+    std::ostringstream snapshot;
 
-    // Timestamp
+    // Get timestamp (formatted)
     std::time_t now = std::time(nullptr);
-    out << "Timestamp: " << std::ctime(&now);  // includes newline
+    char timeBuffer[100];
+    struct tm localTime;
+    localtime_s(&localTime, &now);
+    std::strftime(timeBuffer, sizeof(timeBuffer), "(%m/%d/%Y %I:%M:%S%p)", &localTime);
+    snapshot << "Timestamp: " << timeBuffer << "\n";
 
-    // Number of processes in memory
-    out << "Number of processes in memory: " << processTable.size() << "\n";
+    // Count processes
+    snapshot << "Number of Processes in Memory: " << processTable.size() << "\n";
 
-    // External fragmentation calculation
-    // External fragmentation = free frames * frameSize (since contiguous not required in paging, we treat total free as fragmentation here if required)
+    // External Fragmentation
     size_t freeFrames = 0;
-    for (bool occupied : frameOccupied)
+    for (bool occupied : frameOccupied) {
         if (!occupied) ++freeFrames;
+    }
+    size_t externalFrag = freeFrames * frameSize;
+    snapshot << "Total external fragmentation in B: " << externalFrag << "\n\n";
 
-    size_t externalFragKB = (freeFrames * frameSize) / 1024;
-    out << "Total external fragmentation: " << externalFragKB << " KB\n";
+    // List of memory blocks from high to low
+    snapshot << "----end---- = " << totalMemory << "\n\n";
 
-    // ASCII memory layout
-    out << "Memory Layout:\n";
+    struct Block {
+        size_t upper;
+        std::string pid;
+        size_t lower;
+    };
+    std::vector<Block> blocks;
+
+    // For each frame, try to find which process owns it
     for (size_t i = 0; i < totalFrames; ++i) {
-        if (frameOccupied[i]) {
-            // Find which process/page owns this frame
-            for (const auto& entry : processTable) {
-                const PCB& pcb = entry.second;
-                for (const auto& page : pcb.pageTable) {
-                    if (page.valid && page.frameIndex == static_cast<int>(i)) {
-                        size_t lower = i * frameSize;
-                        size_t upper = (i + 1) * frameSize - 1;
-                        out << "[" << std::setw(5) << std::setfill('0') << lower
-                            << " - " << std::setw(5) << std::setfill('0') << upper
-                            << "] P" << page.processId << " Pg#" << page.pageNumber << "\n";
-                    }
+        if (!frameOccupied[i]) continue;
+
+        for (const auto& entry : processTable) {
+            const PCB& pcb = entry.second;
+
+            for (const auto& page : pcb.pageTable) {
+                if (page.valid && page.frameIndex == static_cast<int>(i)) {
+                    size_t lower = i * frameSize;
+                    size_t upper = (i + 1) * frameSize;
+                    blocks.push_back({ upper, "P" + std::to_string(page.processId), lower });
+                    goto next_frame; // Once matched, skip checking other processes
                 }
             }
         }
+
+    next_frame:
+        continue;
     }
 
-    out.close();
-    std::cout << "[mem-manager] Snapshot saved to " << filename.str() << "\n";
+    // Sort descending by upper address
+    std::sort(blocks.begin(), blocks.end(), [](const Block& a, const Block& b) {
+        return a.upper > b.upper;
+        });
+
+    for (const auto& block : blocks) {
+        snapshot << block.upper << "\n";
+        snapshot << block.pid << "\n";
+        snapshot << block.lower << "\n\n";
+    }
+
+    snapshot << "----start---- = 0\n";
+
+    std::string snapshotStr = snapshot.str();
+
+    // Compute signature
+    std::string signature = std::to_string(std::hash<std::string>{}(snapshotStr));
+
+    {
+        std::lock_guard<std::mutex> lock(snapshot_mutex);
+        if (signature == last_snapshot_signature) return;
+        last_snapshot_signature = signature;
+        snapshot_log.push_back(snapshotStr);
+    }
+
+    // Ensure directory exists
+    std::string folder = "snapshots";
+#if defined(_WIN32)
+    _mkdir(folder.c_str());
+#else
+    mkdir(folder.c_str(), 0777);
+#endif
+
+    // Async write to file
+    std::string fileName = folder + "/memory_stamp_" + std::to_string(quantumCycle) + ".txt";
+    {
+        std::lock_guard<std::mutex> lock(snapshot_mutex);
+        background_tasks.push_back(std::async(std::launch::async, [fileName, snapshotStr]() {
+            std::ofstream out(fileName);
+            if (out.is_open()) {
+                out << snapshotStr;
+                out.close();
+            }
+            }));
+    }
+}
+
+void MemoryManager::flushAsyncWrites() {
+    for (auto& task : background_tasks) {
+        if (task.valid()) task.get();
+    }
+
+    std::cout << "[mem-manager] " << snapshot_log.size() << " snapshots saved to disk.\n";
+    background_tasks.clear();
 }
