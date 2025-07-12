@@ -1,9 +1,10 @@
 #include "instructions.h"
-#include "shared_globals.h" // For get_timestamp(), global_mem_manager
+#include "shared_globals.h" // For get_timestamp(), global_mem_manager, cpu_ticks
 #include <iostream>
 #include <sstream>
 #include <cstdint>
-#include <algorithm> // For std::all_of
+#include <algorithm> // For std::all_of, std::min
+#include <limits>    // For std::numeric_limits
 
 // --- Helper function for checking if a string is a number ---
 // This needs to be defined BEFORE it's used by other functions.
@@ -23,25 +24,23 @@ bool is_number(const std::string& s) {
 // Returns the virtual address for a variable. If it doesn't exist, assigns a new one.
 uint16_t get_or_assign_variable_virtual_address(Process* process, const std::string& var_name) {
     if (process->variable_virtual_addresses.count(var_name)) {
+        // Variable already has an address, return it.
         return process->variable_virtual_addresses[var_name];
     } else {
-        // Assign a new virtual address for the variable
+        // This is a NEW variable. Assign it the next available virtual address.
         uint16_t new_addr = process->next_available_variable_address;
         
-        // Basic check to prevent writing beyond process's allocated virtual memory size
-        // Note: This does not prevent actual physical memory allocation failure (that's handled by MemoryManager::createProcess and pageIn)
+        // Check if allocating this new variable would exceed the process's virtual memory limit
         if (new_addr + sizeof(uint16_t) > global_config.mem_per_proc) {
-             std::cerr << "[ERROR] P" << process->id << ": Exceeded process memory limit (" 
+             std::cerr << "[ERROR_MEM] P" << process->id << ": !!! CRITICAL: Exceeded process memory limit (" 
                        << global_config.mem_per_proc << " bytes) trying to assign virtual address for variable '" 
-                       << var_name << "' at " << new_addr << ".\n";
-             // You might want to halt the process or throw an exception here in a real OS.
-             // For now, we'll let it potentially crash or misbehave if it tries to access past its limit.
-             // Or, you could cap it and return 0.
-             return 0; // Return 0 or some error indicator
+                       << var_name << "' at " << new_addr << ". This variable will NOT be stored.\n";
+             return 0; // Indicate failure to assign address
         }
 
         process->variable_virtual_addresses[var_name] = new_addr;
         process->next_available_variable_address += sizeof(uint16_t); // Each variable is uint16_t (2 bytes)
+        
         return new_addr;
     }
 }
@@ -52,25 +51,30 @@ uint16_t read_variable_value(Process* process, const std::string& arg) {
     uint16_t value = 0;
     if (is_number(arg)) { // If it's a literal number (e.g., "100")
         try {
-            return static_cast<uint16_t>(std::stoi(arg));
+            // Ensure the literal value fits within uint16_t range
+            long val_long = std::stol(arg);
+            if (val_long < 0 || val_long > std::numeric_limits<uint16_t>::max()) {
+                std::cerr << "[ERROR] Invalid numeric literal (out of range uint16_t): " << arg << std::endl;
+                return 0;
+            }
+            return static_cast<uint16_t>(val_long);
         } catch (...) {
-            std::cerr << "[ERROR] Invalid numeric literal: " << arg << std::endl;
+            std::cerr << "[ERROR] Invalid numeric literal (conversion failed): " << arg << std::endl;
             return 0;
         }
     } else { // It's a variable name
-        uint16_t var_addr = get_or_assign_variable_virtual_address(process, arg); // Get/assign virtual address
-        if (var_addr == 0 && arg != "0") { // Check for potential error from get_or_assign_variable_virtual_address (if it returned 0 on error)
-             std::cerr << "[ERROR] P" << process->id << ": Could not get valid virtual address for variable '" << arg << "'. Returning 0.\n";
-             // This might happen if process memory limit is reached
+        uint16_t var_addr = get_or_assign_variable_virtual_address(process, arg); 
+        // var_addr == 0 implies an error from get_or_assign_variable_virtual_address
+        if (var_addr == 0 && arg != "0") { // Added arg != "0" as a safety against a variable actually named "0"
+             // Error already printed by get_or_assign_variable_virtual_address
              return 0;
         }
         
         // Attempt to read from memory manager. This will trigger page-in if needed.
         if (!global_mem_manager->readMemory(process->id, var_addr, value)) {
             // Error handling if memory read itself fails (e.g., beyond allocated process memory)
+            // Error might have already been printed by MemoryManager::readMemory
             std::cerr << "[ERROR] P" << process->id << ": Failed to read variable '" << arg << "' from virtual address " << var_addr << ". Returning 0.\n";
-            // For auto-declaration/initialization, MemoryManager::readMemory itself might ensure a 0 value
-            // if the page was freshly allocated.
             return 0; // Default to 0 on read failure
         }
     }
@@ -79,13 +83,15 @@ uint16_t read_variable_value(Process* process, const std::string& arg) {
 
 // Writes a value to the process's virtual memory using the MemoryManager.
 void write_variable_value(Process* process, const std::string& dest_var_name, uint16_t value) {
-    uint16_t var_addr = get_or_assign_variable_virtual_address(process, dest_var_name); // Get/assign virtual address
-    if (var_addr == 0 && dest_var_name != "0") { // Check for potential error
-        std::cerr << "[ERROR] P" << process->id << ": Could not get valid virtual address for destination variable '" << dest_var_name << "'. Write failed.\n";
+    uint16_t var_addr = get_or_assign_variable_virtual_address(process, dest_var_name); 
+    // var_addr == 0 implies an error from get_or_assign_variable_virtual_address
+    if (var_addr == 0 && dest_var_name != "0") { // Added dest_var_name != "0" for safety
+        // Error already printed by get_or_assign_variable_virtual_address
         return;
     }
 
     if (!global_mem_manager->writeMemory(process->id, var_addr, value)) {
+        // Error might have already been printed by MemoryManager::writeMemory
         std::cerr << "[ERROR] P" << process->id << ": Failed to write value " << value << " to variable '" << dest_var_name << "' at virtual address " << var_addr << ".\n";
     }
 }
@@ -156,11 +162,17 @@ void handle_declare(Process* process, const Instruction& instr) {
 
     std::string var_name = instr.args[0];
     try {
-        uint16_t value_to_assign = static_cast<uint16_t>(std::stoi(instr.args[1]));
+        // Ensure the literal value fits within uint16_t range
+        long val_long = std::stol(instr.args[1]);
+        if (val_long < 0 || val_long > std::numeric_limits<uint16_t>::max()) {
+            std::cerr << "[ERROR] Invalid value in DECLARE (out of range uint16_t): " << instr.args[1] << std::endl;
+            return;
+        }
+        uint16_t value_to_assign = static_cast<uint16_t>(val_long);
         write_variable_value(process, var_name, value_to_assign); // Use new write helper
     }
     catch (...) {
-        std::cerr << "[ERROR] Invalid value in DECLARE: " << instr.args[1] << std::endl;
+        std::cerr << "[ERROR] Invalid value in DECLARE (conversion failed): " << instr.args[1] << std::endl;
     }
 }
 
@@ -174,7 +186,10 @@ void handle_add(Process* process, const Instruction& instr) {
         uint16_t val1 = read_variable_value(process, instr.args[1]); // Use new read helper
         uint16_t val2 = read_variable_value(process, instr.args[2]); // Use new read helper
 
-        uint16_t result = std::min(static_cast<uint32_t>(val1) + val2, static_cast<uint32_t>(UINT16_MAX));
+        // Calculate result, clamping to UINT16_MAX on overflow
+        uint32_t temp_result = static_cast<uint32_t>(val1) + val2;
+        uint16_t result = std::min(temp_result, static_cast<uint32_t>(std::numeric_limits<uint16_t>::max()));
+        
         write_variable_value(process, dest, result); // Use new write helper
 
         std::stringstream log;
@@ -202,7 +217,7 @@ void handle_subtract(Process* process, const Instruction& instr) {
         uint16_t val1 = read_variable_value(process, instr.args[1]); // Use new read helper
         uint16_t val2 = read_variable_value(process, instr.args[2]); // Use new read helper
 
-        // Allowing underflow for uint16_t, which is standard C++ behavior
+        // Perform subtraction. C++ unsigned integer arithmetic handles underflow by wrapping around.
         uint16_t result = val1 - val2; 
         write_variable_value(process, dest, result); // Use new write helper
 
@@ -226,7 +241,13 @@ void handle_sleep(Process* process, const Instruction& instr) {
     if (instr.args.size() != 1) return;
 
     try {
-        uint8_t sleep_ticks = static_cast<uint8_t>(std::stoi(instr.args[0]));
+        long sleep_val = std::stol(instr.args[0]);
+        if (sleep_val < 0 || sleep_val > std::numeric_limits<uint8_t>::max()) {
+            std::cerr << "[ERROR] Invalid operand in SLEEP (out of range uint8_t): " << instr.args[0] << std::endl;
+            return;
+        }
+        uint8_t sleep_ticks = static_cast<uint8_t>(sleep_val);
+
         process->state = ProcessState::WAITING;
         process->sleep_until_tick = cpu_ticks.load() + sleep_ticks;
 
@@ -236,7 +257,7 @@ void handle_sleep(Process* process, const Instruction& instr) {
         process->logs.push_back(log.str());
     }
     catch (...) {
-        std::cerr << "[ERROR] Invalid operand in SLEEP: " << instr.args[0] << std::endl;
+        std::cerr << "[ERROR] Invalid operand in SLEEP (conversion failed): " << instr.args[0] << std::endl;
     }
 }
 
