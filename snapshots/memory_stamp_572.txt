@@ -1,12 +1,8 @@
-Timestamp: (07/12/2025 10:35:42PM)
-Number of processes in memory: 164
+Timestamp: (07/12/2025 10:47:14PM)
+Number of processes in memory: 163
 Total external fragmentation in KB: 13
 
 ----end---- = 16384
-
-2624
-P164
-2608
 
 2608
 P163
