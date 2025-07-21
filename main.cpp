@@ -64,7 +64,7 @@ void enter_process_screen(const std::string& process_name, bool allow_create, si
 
     // Create new process if allowed
     if (!target_process && allow_create) {
-        target_process = create_random_process(memory_size);
+        target_process = create_random_process(process_name, memory_size);
         target_process->name = process_name;
 
 

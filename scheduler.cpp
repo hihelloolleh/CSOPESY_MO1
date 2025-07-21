@@ -9,6 +9,8 @@
 #include <unordered_set> 
 #include <algorithm> // For std::find
 
+std::atomic<int> g_next_pid(1); // Start counting PIDs from 1.
+
 // --- Clock Implementation (No change) ---
 void clock_thread() {
     while (system_running) {
@@ -17,13 +19,11 @@ void clock_thread() {
     }
 }
 
-Process* create_random_process(size_t memory_required) {
-    static std::atomic<int> process_counter(0);
-    process_counter++;
+Process* create_random_process(const std::string& name, size_t memory_required) {
 
     Process* p = new Process();
-    p->id = process_counter;
-    p->name = "p" + std::to_string(p->id);
+    p->id = g_next_pid++;
+    p->name = name;
     p->priority = rand() % 100;
     p->memory_required = memory_required;
 
@@ -112,12 +112,13 @@ Process* create_random_process(size_t memory_required) {
                     }
                     sub_inst.args = { dest, op2, op3_val };
                 } else if (sub_opcode == "PRINT") {
-                    // CRITICAL: Ensure we ONLY pick from process_var_names
-                    // Check process_var_names again for safety, though it should not be empty
-                    if (!process_var_names.empty()) {
+                    if (process_var_names.empty()) {
+                        sub_inst.args = { "Loop Hello (no vars)!" };
+                    }
+                    else {
                         std::string var_to_print = process_var_names[rand() % process_var_names.size()];
-                        // Generate a simple, single-argument instruction.
-                        sub_inst.args = { var_to_print };
+                        sub_inst.args = { "Loop Var:", var_to_print };
+
                     }
                 } else if (sub_opcode == "SLEEP") {
                     sub_inst.args = { std::to_string(rand() % 5 + 1) }; 
@@ -146,11 +147,13 @@ Process* create_random_process(size_t memory_required) {
                  }
                  inst.args = { dest, op2, op3_val };
             } else if (opcode == "PRINT") {
-                // Check process_var_names again for safety, though it should not be empty
-                if (!process_var_names.empty()) {
+                if (process_var_names.empty()) {
+                    inst.args = { "Main Hello (no vars)!" };
+                }
+                else {
                     std::string var_to_print = process_var_names[rand() % process_var_names.size()];
-                    // FIX: Generate a simple, single-argument instruction.
-                    inst.args = { var_to_print };
+                    inst.args = { "Value of ", var_to_print, ": ", var_to_print };
+
                 }
             } else if (opcode == "SLEEP") {
                 inst.args = { std::to_string(rand() % 10 + 1) };
@@ -201,7 +204,7 @@ void process_generator_thread() {
             // On every cycle, first check if any processes are waiting for memory.
             if (!pending_memory_queue.empty()) {
                 std::lock_guard<std::mutex> lock(queue_mutex);
-                int pending_count = pending_memory_queue.size();
+                size_t pending_count = pending_memory_queue.size();
                 for (int i = 0; i < pending_count; ++i) {
                     Process* proc_to_retry = pending_memory_queue.front();
                     pending_memory_queue.pop();
@@ -228,7 +231,9 @@ void process_generator_thread() {
 
                 last_gen_tick = current_tick;
 
-                Process* new_proc = create_random_process(global_config.mem_per_proc);
+                std::string default_name = "p" + std::to_string(g_next_pid.load());
+
+                Process* new_proc = create_random_process(default_name, global_config.mem_per_proc);
 
                 // Attempt to register with the memory manager.
                 if (global_mem_manager->createProcess(*new_proc)) {

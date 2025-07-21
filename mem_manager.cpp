@@ -301,7 +301,7 @@ void MemoryManager::snapshotMemory(int quantumCycle) {
 
     struct Block {
         size_t upper;
-        std::string pid_label; // Changed from 'pid' to avoid confusion with actual int pid
+        std::string name_label;
         size_t lower;
     };
     std::vector<Block> blocks_to_print;
@@ -343,12 +343,14 @@ void MemoryManager::snapshotMemory(int quantumCycle) {
         int min_frame_idx = pair.second.first;
         int max_frame_idx = pair.second.second;
 
+        const PCB& pcb = processTable[pid];
+
         // Calculate the lower address (start of the lowest frame occupied)
         size_t lower_addr = static_cast<size_t>(min_frame_idx) * frameSize;
         // Calculate the upper address (end of the highest frame occupied)
         size_t upper_addr = static_cast<size_t>(max_frame_idx + 1) * frameSize;
 
-        blocks_to_print.push_back({ upper_addr, "P" + std::to_string(pid), lower_addr });
+        blocks_to_print.push_back({ upper_addr, pcb.getName(), lower_addr });
     }
 
     // Sort blocks in descending order by their upper address, as requested by the mockup.
@@ -359,7 +361,7 @@ void MemoryManager::snapshotMemory(int quantumCycle) {
     // Print the sorted memory blocks
     for (const auto& block : blocks_to_print) {
         snapshot << block.upper << "\n";
-        snapshot << block.pid_label << "\n"; // Use pid_label
+        snapshot << block.name_label << "\n"; 
         snapshot << block.lower << "\n\n";
     }
 

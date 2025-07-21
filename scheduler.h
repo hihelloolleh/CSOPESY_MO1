@@ -7,7 +7,7 @@
 void clock_thread();
 
 // Creates a new random process
-Process* create_random_process(size_t memory_size);
+Process* create_random_process(const std::string& name, size_t memory_size);
 
 // The main loop for the thread that generates processes.
 void process_generator_thread();

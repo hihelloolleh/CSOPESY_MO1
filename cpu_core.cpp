@@ -25,7 +25,7 @@ void cpu_core_worker(int core_id) {
         if (!process) continue;
 
         if (global_mem_manager->getProcess(process->id) == nullptr) {
-            if (!global_mem_manager->createProcess(*process, global_config.mem_per_proc)) {
+            if (!global_mem_manager->createProcess(*process)) {
                 
                 {
                     std::lock_guard<std::mutex> lock(queue_mutex);
