@@ -32,10 +32,11 @@ uint16_t get_or_assign_variable_virtual_address(Process* process, const std::str
         
         // Check if allocating this new variable would exceed the process's virtual memory limit
         if (new_addr + sizeof(uint16_t) > global_config.mem_per_proc) {
-             std::cerr << "[ERROR_MEM] P" << process->id << ": !!! CRITICAL: Exceeded process memory limit (" 
-                       << global_config.mem_per_proc << " bytes) trying to assign virtual address for variable '" 
-                       << var_name << "' at " << new_addr << ". This variable will NOT be stored.\n";
-             return 0; // Indicate failure to assign address
+            std::cerr << "[ERROR] P" << process->id << ": CRITICAL - Memory allocation failed. Exceeded process memory limit ("
+                << global_config.mem_per_proc << " bytes) for variable '"
+                << var_name << "'.\n";
+            process->state = ProcessState::CRASHED; // Set state to CRASHED
+            return 0; // Indicate failure
         }
 
         process->variable_virtual_addresses[var_name] = new_addr;
@@ -54,27 +55,29 @@ uint16_t read_variable_value(Process* process, const std::string& arg) {
             // Ensure the literal value fits within uint16_t range
             long val_long = std::stol(arg);
             if (val_long < 0 || val_long > std::numeric_limits<uint16_t>::max()) {
-                std::cerr << "[ERROR] Invalid numeric literal (out of range uint16_t): " << arg << std::endl;
+                std::cerr << "[ERROR] P" << process->id << ": Invalid numeric literal (out of uint16_t range): " << arg << std::endl;
+                process->state = ProcessState::CRASHED;
                 return 0;
             }
             return static_cast<uint16_t>(val_long);
-        } catch (...) {
-            std::cerr << "[ERROR] Invalid numeric literal (conversion failed): " << arg << std::endl;
+        }
+        catch (...) {
+            std::cerr << "[ERROR] P" << process->id << ": Invalid numeric literal (conversion failed): " << arg << std::endl;
+            process->state = ProcessState::CRASHED;
             return 0;
         }
-    } else { // It's a variable name
-        uint16_t var_addr = get_or_assign_variable_virtual_address(process, arg); 
-        // var_addr == 0 implies an error from get_or_assign_variable_virtual_address
-        if (var_addr == 0 && arg != "0") { // Added arg != "0" as a safety against a variable actually named "0"
-             // Error already printed by get_or_assign_variable_virtual_address
-             return 0;
+    }
+    else { // It's a variable name
+        uint16_t var_addr = get_or_assign_variable_virtual_address(process, arg);
+        if (process->state == ProcessState::CRASHED) {
+            return 0; // Abort if allocation failed and crashed the process
         }
-        
+
         // Attempt to read from memory manager. This will trigger page-in if needed.
         if (!global_mem_manager->readMemory(process->id, var_addr, value)) {
             // Error handling if memory read itself fails (e.g., beyond allocated process memory)
-            // Error might have already been printed by MemoryManager::readMemory
-            std::cerr << "[ERROR] P" << process->id << ": Failed to read variable '" << arg << "' from virtual address " << var_addr << ". Returning 0.\n";
+            std::cerr << "[ERROR] P" << process->id << ": Segmentation fault. Failed to read variable '" << arg << "' from virtual address " << var_addr << ".\n";
+            process->state = ProcessState::CRASHED;
             return 0; // Default to 0 on read failure
         }
     }
@@ -83,21 +86,23 @@ uint16_t read_variable_value(Process* process, const std::string& arg) {
 
 // Writes a value to the process's virtual memory using the MemoryManager.
 void write_variable_value(Process* process, const std::string& dest_var_name, uint16_t value) {
-    uint16_t var_addr = get_or_assign_variable_virtual_address(process, dest_var_name); 
-    // var_addr == 0 implies an error from get_or_assign_variable_virtual_address
-    if (var_addr == 0 && dest_var_name != "0") { // Added dest_var_name != "0" for safety
-        // Error already printed by get_or_assign_variable_virtual_address
-        return;
+    uint16_t var_addr = get_or_assign_variable_virtual_address(process, dest_var_name);
+    if (process->state == ProcessState::CRASHED) {
+        return; // Abort if allocation failed and crashed the process
     }
 
     if (!global_mem_manager->writeMemory(process->id, var_addr, value)) {
-        // Error might have already been printed by MemoryManager::writeMemory
-        std::cerr << "[ERROR] P" << process->id << ": Failed to write value " << value << " to variable '" << dest_var_name << "' at virtual address " << var_addr << ".\n";
+        std::cerr << "[ERROR] P" << process->id << ": Segmentation fault. Failed to write value " << value << " to variable '" << dest_var_name << "' at virtual address " << var_addr << ".\n";
+        process->state = ProcessState::CRASHED;
     }
 }
 
 // --- Main instruction dispatcher ---
 void execute_instruction(Process* process) {
+    if (process->state == ProcessState::CRASHED) {
+        return;
+    }
+
     // First: check if inside a FOR loop
     if (!process->for_stack.empty()) {
         ForContext& ctx = process->for_stack.top();
@@ -144,6 +149,7 @@ void handle_print(Process* process, const Instruction& instr) {
     formatted_log << get_timestamp() << " Core:" << process->assigned_core << " \"";
 
     for (const std::string& arg : instr.args) {
+        if (process->state == ProcessState::CRASHED) return;
         if (is_number(arg)) { // If it's a literal number
             formatted_log << arg;
         } else { // It's assumed to be a variable name
@@ -158,7 +164,11 @@ void handle_print(Process* process, const Instruction& instr) {
 
 
 void handle_declare(Process* process, const Instruction& instr) {
-    if (instr.args.size() != 2) return;
+    if (instr.args.size() != 2) {
+        std::cerr << "[ERROR] P" << process->id << ": Invalid arguments for DECLARE. Expected 2, got " << instr.args.size() << ".\n";
+        process->state = ProcessState::CRASHED;
+        return;
+    }
 
     std::string var_name = instr.args[0];
     try {
@@ -166,6 +176,7 @@ void handle_declare(Process* process, const Instruction& instr) {
         long val_long = std::stol(instr.args[1]);
         if (val_long < 0 || val_long > std::numeric_limits<uint16_t>::max()) {
             std::cerr << "[ERROR] Invalid value in DECLARE (out of range uint16_t): " << instr.args[1] << std::endl;
+            process->state = ProcessState::CRASHED;
             return;
         }
         uint16_t value_to_assign = static_cast<uint16_t>(val_long);
@@ -173,24 +184,33 @@ void handle_declare(Process* process, const Instruction& instr) {
     }
     catch (...) {
         std::cerr << "[ERROR] Invalid value in DECLARE (conversion failed): " << instr.args[1] << std::endl;
+        process->state = ProcessState::CRASHED;
     }
 }
 
 
 void handle_add(Process* process, const Instruction& instr) {
-    if (instr.args.size() != 3) return;
-
+    if (instr.args.size() != 3) {
+        std::cerr << "[Error] P" << process->id << ": Invalid arguments for ADD. Expected 3, got " << instr.args.size() << ".\n";
+        process->state = ProcessState::CRASHED;
+        return;
+    }
     const std::string& dest = instr.args[0];
 
     try {
         uint16_t val1 = read_variable_value(process, instr.args[1]); // Use new read helper
+        if (process->state == ProcessState::CRASHED) return;
+
         uint16_t val2 = read_variable_value(process, instr.args[2]); // Use new read helper
+        if (process->state == ProcessState::CRASHED) return;
+
 
         // Calculate result, clamping to UINT16_MAX on overflow
         uint32_t temp_result = static_cast<uint32_t>(val1) + val2;
         uint16_t result = std::min(temp_result, static_cast<uint32_t>(std::numeric_limits<uint16_t>::max()));
         
         write_variable_value(process, dest, result); // Use new write helper
+        if (process->state == ProcessState::CRASHED) return;
 
         std::stringstream log;
         log << get_timestamp() << " Core:" << process->assigned_core
@@ -209,17 +229,24 @@ void handle_add(Process* process, const Instruction& instr) {
 
 
 void handle_subtract(Process* process, const Instruction& instr) {
-    if (instr.args.size() != 3) return;
-
+    if (instr.args.size() != 3) {
+        std::cerr << "[Error] P" << process->id << ": Invalid arguments for SUBTRACT. Expected 3, got " << instr.args.size() << ".\n";
+        process->state = ProcessState::CRASHED;
+        return;
+    }
     const std::string& dest = instr.args[0];
 
     try {
         uint16_t val1 = read_variable_value(process, instr.args[1]); // Use new read helper
+        if (process->state == ProcessState::CRASHED) return;
+
         uint16_t val2 = read_variable_value(process, instr.args[2]); // Use new read helper
+        if (process->state == ProcessState::CRASHED) return;
 
         // Perform subtraction. C++ unsigned integer arithmetic handles underflow by wrapping around.
         uint16_t result = val1 - val2; 
         write_variable_value(process, dest, result); // Use new write helper
+        if (process->state == ProcessState::CRASHED) return;
 
         std::stringstream log;
         log << get_timestamp() << " Core:" << process->assigned_core
@@ -238,12 +265,16 @@ void handle_subtract(Process* process, const Instruction& instr) {
 
 
 void handle_sleep(Process* process, const Instruction& instr) {
-    if (instr.args.size() != 1) return;
-
+    if (instr.args.size() != 1) {
+        std::cerr << "[ERROR] P" << process->id << ": Invalid arguments for SLEEP. Expected 1, got " << instr.args.size() << ".\n";
+        process->state = ProcessState::CRASHED;
+        return;
+    }
     try {
         long sleep_val = std::stol(instr.args[0]);
         if (sleep_val < 0 || sleep_val > std::numeric_limits<uint8_t>::max()) {
             std::cerr << "[ERROR] Invalid operand in SLEEP (out of range uint8_t): " << instr.args[0] << std::endl;
+            process->state = ProcessState::CRASHED;
             return;
         }
         uint8_t sleep_ticks = static_cast<uint8_t>(sleep_val);
@@ -258,13 +289,17 @@ void handle_sleep(Process* process, const Instruction& instr) {
     }
     catch (...) {
         std::cerr << "[ERROR] Invalid operand in SLEEP (conversion failed): " << instr.args[0] << std::endl;
+        process->state = ProcessState::CRASHED;
     }
 }
 
 
 void handle_for(Process* process, const Instruction& instr) {
-    if (instr.args.size() != 1) return;
-
+    if (instr.args.size() != 1) {
+        std::cerr << "[ERROR] P" << process->id << ": Invalid arguments for FOR. Expected 1, got " << instr.args.size() << ".\n";
+        process->state = ProcessState::CRASHED;
+        return;
+    }
     try {
         int repeat_count = std::stoi(instr.args[0]);
         if (repeat_count <= 0 || instr.sub_instructions.empty()) return;
@@ -295,6 +330,7 @@ void handle_for(Process* process, const Instruction& instr) {
     }
     catch (...) {
         std::cerr << "[ERROR] Invalid repeat count in FOR: " << instr.args[0] << std::endl;
+        process->state = ProcessState::CRASHED;
     }
 }
 

@@ -57,9 +57,23 @@ void enter_process_screen(const std::string& process_name, bool allow_create, si
     }
 
 	// If process finished cant load
-    if (target_process && target_process->finished) {
-        std::cout << "Process <" << process_name << "> has finished execution. Opening in read-only view.\n";
-        return;
+    if (target_process) {
+        if (target_process->state == ProcessState::CRASHED) {
+            std::stringstream ss;
+            // Format the address as a 4-digit uppercase hex number (e.g., 0x001A)
+            ss << "0x" << std::uppercase << std::hex << std::setfill('0') << std::setw(4)
+                << target_process->faulting_address.value_or(0);
+
+            std::cout << "Process <" << target_process->name
+                << "> shut down due to memory access violation error that occurred at "
+                << target_process->end_time << ". "
+                << ss.str() << " invalid.\n";
+            return; // Exit the function, do not show the process view.
+        }
+
+        if (target_process->state == ProcessState::FINISHED && target_process->finished) {
+            std::cout << "Process <" << process_name << "> has finished execution. Opening in read-only view.\n";
+        }
     }
 
     // Create new process if allowed
