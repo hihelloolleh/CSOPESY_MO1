@@ -25,7 +25,7 @@ void handle_for(Process* process, const Instruction& instr);
 
 // Add new helper functions for memory interaction
 uint16_t get_or_assign_variable_virtual_address(Process* process, const std::string& var_name);
-uint16_t read_variable_value(Process* process, const std::string& arg);
-void write_variable_value(Process* process, const std::string& dest_var_name, uint16_t value);
+bool read_variable_value(Process* process, const std::string& arg, uint16_t& out_value, uint16_t& out_fault_addr);
+bool write_variable_value(Process* process, const std::string& dest_var_name, uint16_t out_value, uint16_t& out_fault_addr);
 
 #endif // INSTRUCTIONS_H
