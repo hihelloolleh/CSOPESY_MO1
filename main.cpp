@@ -2,7 +2,6 @@
 
 // --- C++ Standard Libraries ---
 #include <iostream>
-#include <iomanip>
 #include <string>
 #include <vector>
 #include <sstream>
@@ -43,6 +42,7 @@ void start_cpu_cores() {
     std::cout << global_config.num_cpu << " CPU cores have been started." << std::endl;
 }
 
+// helper func, refractored -s -r into one function.
 void enter_process_screen(const std::string& process_name, bool allow_create, size_t memory_size = 0) {
     Process* target_process = nullptr;
 
@@ -56,38 +56,21 @@ void enter_process_screen(const std::string& process_name, bool allow_create, si
         }
     }
 
-    // --- NEW: CRASH REPORTING LOGIC ---
-    // If we found a process, check its state first. This is for 'screen -r'.
-    if (target_process) {
-        if (target_process->state == ProcessState::CRASHED) {
-            std::stringstream ss;
-            // Format the address as a 4-digit uppercase hex number (e.g., 0x001A)
-            ss << "0x" << std::uppercase << std::hex << std::setfill('0') << std::setw(4)
-                << target_process->faulting_address.value_or(0);
-
-            std::cout << "Process <" << target_process->name
-                << "> shut down due to memory access violation error that occurred at "
-                << target_process->end_time << ". "
-                << ss.str() << " invalid.\n";
-            return; // Exit the function, do not show the process view.
-        }
-
-        // This handles the normal "finished" case.
-        if (target_process->finished) {
-            std::cout << "Process <" << process_name << "> has finished execution. Opening in read-only view.\n";
-            // Let it fall through to the process view below.
-        }
+	// If process finished cant load
+    if (target_process && target_process->finished) {
+        std::cout << "Process <" << process_name << "> has finished execution. Opening in read-only view.\n";
+        return;
     }
 
-    // --- PROCESS CREATION LOGIC ---
-    // Create new process if allowed and it wasn't found.
+    // Create new process if allowed
     if (!target_process && allow_create) {
-        // Assuming create_random_process takes name and size
         target_process = create_random_process(memory_size);
+        target_process->name = process_name;
+
 
         if (!global_mem_manager->createProcess(*target_process)) {
-            std::cout << "Failed to create process <" << process_name << ">. Not enough memory.\n";
-            delete target_process;
+            std::cout << "Failed to create process <" << process_name << ">. Not enough memory or process ID conflict.\n";
+            delete target_process; // Clean up memory if registration fails.
             return;
         }
 
@@ -99,13 +82,11 @@ void enter_process_screen(const std::string& process_name, bool allow_create, si
         queue_cv.notify_one();
     }
 
-    // If after all checks, we still don't have a process, it was never found.
     if (!target_process) {
         std::cout << "Process <" << process_name << "> not found.\n";
         return;
     }
 
-    // --- REGULAR PROCESS VIEW LOOP ---
     clear_console();
     display_process_view(target_process);
 
@@ -122,13 +103,102 @@ void enter_process_screen(const std::string& process_name, bool allow_create, si
             display_process_view(target_process);
         }
         else {
-            // ... (Instruction input logic remains unchanged) ...
+            std::stringstream ss(process_command);
+            std::string opcode;
+            ss >> opcode;
+
+            if (target_process->finished && process_command != "exit" && process_command != "process-smi") {
+                std::cout << "Process has finished execution. Cannot modify instructions. Only 'exit' and 'process-smi' are allowed.\n";
+                continue;
+            }
+
+            // Check if it's a valid Barebones instruction
+            if (opcode == "FOR") {
+                int repeat_count;
+                ss >> repeat_count;
+                if (repeat_count <= 0) {
+                    std::cout << "Invalid repeat count.\n";
+                    continue;
+                }
+
+                std::vector<Instruction> loop_body;
+                std::string loop_line;
+
+                std::cout << "Enter loop body (type ENDFOR to finish):\n";
+                while (true) {
+                    std::cout << ">> ";
+                    std::getline(std::cin, loop_line);
+                    if (loop_line == "ENDFOR") break;
+
+                    std::stringstream lss(loop_line);
+                    std::string sub_opcode;
+                    lss >> sub_opcode;
+
+                    Instruction sub_instr;
+                    sub_instr.opcode = sub_opcode;
+
+                    std::string arg;
+                    while (lss >> arg)
+                        sub_instr.args.push_back(arg);
+
+                    loop_body.push_back(sub_instr);
+                }
+
+                Instruction for_instr;
+                for_instr.opcode = "FOR";
+                for_instr.args = { std::to_string(repeat_count) };
+                for_instr.sub_instructions = loop_body;
+
+                target_process->instructions.push_back(for_instr);
+                std::cout << "Instructions in process:\n";
+                for (int i = 0; i < target_process->instructions.size(); ++i) {
+                    std::cout << i << ": " << target_process->instructions[i].opcode << "\n";
+                }
+
+                {
+                    std::lock_guard<std::mutex> lock(queue_mutex);
+                    ready_queue.push(target_process);
+                }
+                queue_cv.notify_one();
+            }
+            else if (
+                opcode == "DECLARE" || opcode == "ADD" || opcode == "SUBTRACT" ||
+                opcode == "PRINT" || opcode == "SLEEP"
+                ) {
+                Instruction instr;
+                instr.opcode = opcode;
+
+                std::string arg;
+                while (ss >> arg)
+                    instr.args.push_back(arg);
+
+                if (opcode == "SLEEP") {
+                    if (instr.args.empty() || !std::all_of(instr.args[0].begin(), instr.args[0].end(), ::isdigit)) {
+                        std::cout << "Invalid SLEEP duration.\n";
+                        continue;
+                    }
+                }
+
+                target_process->instructions.push_back(instr);
+
+                std::cout << "Instruction added: " << opcode << "\n";
+                {
+                    std::lock_guard<std::mutex> lock(queue_mutex);
+                    ready_queue.push(target_process);
+                }
+                queue_cv.notify_one();
+            }
+            else {
+                std::cout << "Unknown command. Only 'exit', 'process-smi', or a valid Barebones instruction (ADD, SUBTRACT, DECLARE, PRINT, SLEEP, FOR) are allowed.\n";
+            }
         }
     }
+
 
     clear_console();
     print_header();
 }
+
 std::string get_scheduler_name(SchedulerType type) {
     switch (type) {
     case SchedulerType::FCFS: return "First Come First Serve (FCFS)";

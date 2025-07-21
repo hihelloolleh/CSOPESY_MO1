@@ -25,7 +25,7 @@ void cpu_core_worker(int core_id) {
         if (!process) continue;
 
         if (global_mem_manager->getProcess(process->id) == nullptr) {
-            if (!global_mem_manager->createProcess(*process)) {
+            if (!global_mem_manager->createProcess(*process, global_config.mem_per_proc)) {
                 
                 {
                     std::lock_guard<std::mutex> lock(queue_mutex);
@@ -86,11 +86,6 @@ void cpu_core_worker(int core_id) {
             }
 
             execute_instruction(process);
-            if (process->state == ProcessState::CRASHED) {
-                // A crash marks the process as finished, so just break the loop.
-                // Memory will be cleaned up by the logic that handles finished processes.
-                break;
-            }
             process->program_counter++;
 
             // Instead of just incrementing cpu_ticks, simulate real time:

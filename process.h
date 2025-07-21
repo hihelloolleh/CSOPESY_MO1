@@ -7,7 +7,6 @@
 #include <cstdint>  // For uint16_t
 #include <stack>    // For FOR loop context
 #include <algorithm>
-#include <optional> 
 
 struct Instruction {
     std::string opcode;
@@ -20,8 +19,7 @@ enum class ProcessState {
     READY,
     RUNNING,
     WAITING,
-    FINISHED,
-    CRASHED
+    FINISHED
 };
 
 struct ForContext {
@@ -42,7 +40,6 @@ struct Process {
     
     std::map<std::string, uint16_t> variable_virtual_addresses;
     uint16_t next_available_variable_address = 0; // Tracks the next available virtual address for a new variable
-    std::optional<uint16_t> faulting_address;
 
     std::vector<int> insPages; 
     std::vector<int> varPages;

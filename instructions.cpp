@@ -45,46 +45,55 @@ uint16_t get_or_assign_variable_virtual_address(Process* process, const std::str
     }
 }
 
-bool read_variable_value(Process* process, const std::string& arg, uint16_t& out_value, uint16_t& out_fault_addr) {
-    if (is_number(arg)) { // If it's a literal number
+// Reads a value from the process's virtual memory using the MemoryManager.
+// Handles literals and auto-declares undeclared variables to 0.
+uint16_t read_variable_value(Process* process, const std::string& arg) {
+    uint16_t value = 0;
+    if (is_number(arg)) { // If it's a literal number (e.g., "100")
         try {
+            // Ensure the literal value fits within uint16_t range
             long val_long = std::stol(arg);
-            if (val_long < 0 || val_long > std::numeric_limits<uint16_t>::max()) return false;
-            out_value = static_cast<uint16_t>(val_long);
-            return true;
+            if (val_long < 0 || val_long > std::numeric_limits<uint16_t>::max()) {
+                std::cerr << "[ERROR] Invalid numeric literal (out of range uint16_t): " << arg << std::endl;
+                return 0;
+            }
+            return static_cast<uint16_t>(val_long);
+        } catch (...) {
+            std::cerr << "[ERROR] Invalid numeric literal (conversion failed): " << arg << std::endl;
+            return 0;
         }
-        catch (...) { return false; }
+    } else { // It's a variable name
+        uint16_t var_addr = get_or_assign_variable_virtual_address(process, arg); 
+        // var_addr == 0 implies an error from get_or_assign_variable_virtual_address
+        if (var_addr == 0 && arg != "0") { // Added arg != "0" as a safety against a variable actually named "0"
+             // Error already printed by get_or_assign_variable_virtual_address
+             return 0;
+        }
+        
+        // Attempt to read from memory manager. This will trigger page-in if needed.
+        if (!global_mem_manager->readMemory(process->id, var_addr, value)) {
+            // Error handling if memory read itself fails (e.g., beyond allocated process memory)
+            // Error might have already been printed by MemoryManager::readMemory
+            std::cerr << "[ERROR] P" << process->id << ": Failed to read variable '" << arg << "' from virtual address " << var_addr << ". Returning 0.\n";
+            return 0; // Default to 0 on read failure
+        }
     }
-
-    // It's a variable name
-    uint16_t var_addr = get_or_assign_variable_virtual_address(process, arg);
-    if (var_addr == 0 && arg != "0") {
-        out_fault_addr = var_addr; // The address it failed to get
-        return false;
-    }
-
-    if (!global_mem_manager->readMemory(process->id, var_addr, out_value)) {
-        out_fault_addr = var_addr; // The address it failed to read
-        return false; // MEMORY ACCESS VIOLATION
-    }
-
-    return true; // Success
+    return value;
 }
 
 // Writes a value to the process's virtual memory using the MemoryManager.
-bool write_variable_value(Process* process, const std::string& dest_var_name, uint16_t out_value, uint16_t& out_fault_addr) {
-    uint16_t var_addr = get_or_assign_variable_virtual_address(process, dest_var_name);
-    if (var_addr == 0 && dest_var_name != "0") {
-        out_fault_addr = var_addr;
-        return false;
+void write_variable_value(Process* process, const std::string& dest_var_name, uint16_t value) {
+    uint16_t var_addr = get_or_assign_variable_virtual_address(process, dest_var_name); 
+    // var_addr == 0 implies an error from get_or_assign_variable_virtual_address
+    if (var_addr == 0 && dest_var_name != "0") { // Added dest_var_name != "0" for safety
+        // Error already printed by get_or_assign_variable_virtual_address
+        return;
     }
 
-    if (!global_mem_manager->writeMemory(process->id, var_addr, out_value)) {
-        out_fault_addr = var_addr; // The address it failed to write to
-        return false; // MEMORY ACCESS VIOLATION
+    if (!global_mem_manager->writeMemory(process->id, var_addr, value)) {
+        // Error might have already been printed by MemoryManager::writeMemory
+        std::cerr << "[ERROR] P" << process->id << ": Failed to write value " << value << " to variable '" << dest_var_name << "' at virtual address " << var_addr << ".\n";
     }
-
-    return true; // Success
 }
 
 // --- Main instruction dispatcher ---
@@ -135,23 +144,14 @@ void handle_print(Process* process, const Instruction& instr) {
     formatted_log << get_timestamp() << " Core:" << process->assigned_core << " \"";
 
     for (const std::string& arg : instr.args) {
-        if (is_number(arg)) {
+        if (is_number(arg)) { // If it's a literal number
             formatted_log << arg;
-        }
-        else {
-            uint16_t value_to_print;
-            uint16_t fault_addr;
-            if (!read_variable_value(process, arg, value_to_print, fault_addr)) {
-                // --- CRASH DETECTION ---
-                process->state = ProcessState::CRASHED;
-                process->finished = true;
-                process->end_time = get_timestamp();
-                process->faulting_address = fault_addr;
-                return; // Stop execution
-            }
+        } else { // It's assumed to be a variable name
+            uint16_t value_to_print = read_variable_value(process, arg);
             formatted_log << value_to_print;
         }
     }
+
     formatted_log << "\"";
     process->logs.push_back(formatted_log.str());
 }
@@ -159,58 +159,28 @@ void handle_print(Process* process, const Instruction& instr) {
 
 void handle_declare(Process* process, const Instruction& instr) {
     if (instr.args.size() != 2) return;
+
     std::string var_name = instr.args[0];
     try {
+        // Ensure the literal value fits within uint16_t range
         long val_long = std::stol(instr.args[1]);
-        if (val_long < 0 || val_long > std::numeric_limits<uint16_t>::max()) return;
-        uint16_t value_to_assign = static_cast<uint16_t>(val_long);
-
-        uint16_t fault_addr;
-        if (!write_variable_value(process, var_name, value_to_assign, fault_addr)) {
-            // --- CRASH DETECTION ---
-            process->state = ProcessState::CRASHED;
-            process->finished = true;
-            process->end_time = get_timestamp();
-            process->faulting_address = fault_addr;
-            return; // Stop execution
+        if (val_long < 0 || val_long > std::numeric_limits<uint16_t>::max()) {
+            std::cerr << "[ERROR] Invalid value in DECLARE (out of range uint16_t): " << instr.args[1] << std::endl;
+            return;
         }
+        uint16_t value_to_assign = static_cast<uint16_t>(val_long);
+        write_variable_value(process, var_name, value_to_assign); // Use new write helper
     }
-    catch (...) { /* ... */ }
+    catch (...) {
+        std::cerr << "[ERROR] Invalid value in DECLARE (conversion failed): " << instr.args[1] << std::endl;
+    }
 }
+
 
 void handle_add(Process* process, const Instruction& instr) {
     if (instr.args.size() != 3) return;
+
     const std::string& dest = instr.args[0];
-    uint16_t val1, val2, fault_addr;
-
-    if (!read_variable_value(process, instr.args[1], val1, fault_addr)) {
-        // --- CRASH DETECTION ---
-        process->state = ProcessState::CRASHED;
-        process->finished = true;
-        process->end_time = get_timestamp();
-        process->faulting_address = fault_addr;
-        return;
-    }
-    if (!read_variable_value(process, instr.args[2], val2, fault_addr)) {
-        // --- CRASH DETECTION ---
-        process->state = ProcessState::CRASHED;
-        process->finished = true;
-        process->end_time = get_timestamp();
-        process->faulting_address = fault_addr;
-        return;
-    }
-
-    uint32_t temp_result = static_cast<uint32_t>(val1) + val2;
-    uint16_t result = std::min(temp_result, static_cast<uint32_t>(std::numeric_limits<uint16_t>::max()));
-
-    if (!write_variable_value(process, dest, result, fault_addr)) {
-        // --- CRASH DETECTION ---
-        process->state = ProcessState::CRASHED;
-        process->finished = true;
-        process->end_time = get_timestamp();
-        process->faulting_address = fault_addr;
-        return;
-    }
 
     try {
         uint16_t val1 = read_variable_value(process, instr.args[1]); // Use new read helper
@@ -240,33 +210,8 @@ void handle_add(Process* process, const Instruction& instr) {
 
 void handle_subtract(Process* process, const Instruction& instr) {
     if (instr.args.size() != 3) return;
+
     const std::string& dest = instr.args[0];
-    uint16_t val1, val2, fault_addr;
-
-    if (!read_variable_value(process, instr.args[1], val1, fault_addr)) {
-        process->state = ProcessState::CRASHED;
-        process->finished = true;
-        process->end_time = get_timestamp();
-        process->faulting_address = fault_addr;
-        return;
-    }
-    if (!read_variable_value(process, instr.args[2], val2, fault_addr)) {
-        process->state = ProcessState::CRASHED;
-        process->finished = true;
-        process->end_time = get_timestamp();
-        process->faulting_address = fault_addr;
-        return;
-    }
-
-    uint16_t result = val1 - val2;
-
-    if (!write_variable_value(process, dest, result, fault_addr)) {
-        process->state = ProcessState::CRASHED;
-        process->finished = true;
-        process->end_time = get_timestamp();
-        process->faulting_address = fault_addr;
-        return;
-    }
 
     try {
         uint16_t val1 = read_variable_value(process, instr.args[1]); // Use new read helper
