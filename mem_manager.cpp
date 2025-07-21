@@ -3,7 +3,7 @@
 #include "page.h"
 #include "process.h"
 #include "config.h"
-#include "shared_globals.h" // <--- IMPORTANT: This include was the cause of the previous error.
+#include "shared_globals.h" 
 #include <iostream>
 #include <iomanip>
 #include <cstring>
@@ -29,9 +29,13 @@ MemoryManager::MemoryManager(const Config& config)
 }
 
 
-bool MemoryManager::createProcess(const Process& proc, size_t memoryRequired) {
+bool MemoryManager::createProcess(const Process& proc) {
+    std::lock_guard<std::mutex> lock(manager_mutex);
+
     int pid = proc.id;
     const std::string& name = proc.name;
+    size_t memoryRequired = proc.memory_required;
+
 
     if (processTable.find(pid) != processTable.end()) return false;
 
@@ -70,6 +74,8 @@ bool MemoryManager::createProcess(const Process& proc, size_t memoryRequired) {
 }
 
 void MemoryManager::removeProcess(int pid) {
+    std::lock_guard<std::mutex> lock(manager_mutex);
+
     auto it = processTable.find(pid);
     if (it == processTable.end()) return;
 
@@ -87,6 +93,8 @@ void MemoryManager::removeProcess(int pid) {
 
 
 bool MemoryManager::readMemory(int pid, uint16_t address, uint16_t& value) {
+    std::lock_guard<std::mutex> lock(manager_mutex);
+    
     auto it = processTable.find(pid);
     if (it == processTable.end()) return false;
 
@@ -112,6 +120,8 @@ bool MemoryManager::readMemory(int pid, uint16_t address, uint16_t& value) {
 }
 
 bool MemoryManager::writeMemory(int pid, uint16_t address, uint16_t value) {
+    std::lock_guard<std::mutex> lock(manager_mutex);
+    
     auto it = processTable.find(pid);
     if (it == processTable.end()) return false;
 
@@ -138,6 +148,8 @@ bool MemoryManager::writeMemory(int pid, uint16_t address, uint16_t value) {
 }
 
 Process* MemoryManager::getProcess(int pid) {
+    std::lock_guard<std::mutex> lock(manager_mutex);
+    
     auto it = processTable.find(pid);
     if (it == processTable.end()) return nullptr;
     return &it->second.process;
@@ -213,6 +225,8 @@ int MemoryManager::getFreeFrameOrEvict() {
 }
 
 void MemoryManager::showProcessSMI() {
+    std::lock_guard<std::mutex> lock(manager_mutex);
+
     std::cout << "[process-smi]\n";
     for (auto& entry : processTable) {
         int pid = entry.first;
@@ -227,6 +241,8 @@ void MemoryManager::showProcessSMI() {
 }
 
 void MemoryManager::showVMStat() {
+    std::lock_guard<std::mutex> lock(manager_mutex);
+    
     size_t used = 0;
     for (bool occ : frameOccupied) used += occ;
 
@@ -239,6 +255,8 @@ void MemoryManager::showVMStat() {
 }
 
 void MemoryManager::snapshotMemory(int quantumCycle) {
+    std::lock_guard<std::mutex> lock(manager_mutex);
+
     // Return early if no processes have ever been in memory and it's not the initial state (quantum 0)
     // This prevents empty snapshots unless explicitly starting with no processes at Q0.
     if (processTable.empty() && quantumCycle > 0) return; 

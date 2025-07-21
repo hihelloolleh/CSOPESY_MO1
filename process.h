@@ -33,11 +33,11 @@ struct Process {
     int id;
     std::string name;
 
+    size_t memory_required = 0;
+
     std::vector<Instruction> instructions;
     int program_counter = 0;
-    // REMOVE THIS: std::map<std::string, uint16_t> variables;
     
-    // ADD THIS: Map variable names to their virtual memory addresses (offsets within the process's 4096-byte space)
     std::map<std::string, uint16_t> variable_virtual_addresses;
     uint16_t next_available_variable_address = 0; // Tracks the next available virtual address for a new variable
 

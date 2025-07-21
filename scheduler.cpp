@@ -17,7 +17,7 @@ void clock_thread() {
     }
 }
 
-Process* create_random_process() {
+Process* create_random_process(size_t memory_required) {
     static std::atomic<int> process_counter(0);
     process_counter++;
 
@@ -25,6 +25,7 @@ Process* create_random_process() {
     p->id = process_counter;
     p->name = "p" + std::to_string(p->id);
     p->priority = rand() % 100;
+    p->memory_required = memory_required;
 
     int instruction_count = rand() % (global_config.max_ins - global_config.min_ins + 1) + global_config.min_ins;
     if (instruction_count < 1) instruction_count = 1; 
@@ -113,11 +114,10 @@ Process* create_random_process() {
                 } else if (sub_opcode == "PRINT") {
                     // CRITICAL: Ensure we ONLY pick from process_var_names
                     // Check process_var_names again for safety, though it should not be empty
-                    if (process_var_names.empty()) { 
-                        sub_inst.args = { "Loop Hello (no vars)!" };
-                    } else {
+                    if (!process_var_names.empty()) {
                         std::string var_to_print = process_var_names[rand() % process_var_names.size()];
-                        sub_inst.args = { "Loop Var:", var_to_print };
+                        // Generate a simple, single-argument instruction.
+                        sub_inst.args = { var_to_print };
                     }
                 } else if (sub_opcode == "SLEEP") {
                     sub_inst.args = { std::to_string(rand() % 5 + 1) }; 
@@ -146,13 +146,11 @@ Process* create_random_process() {
                  }
                  inst.args = { dest, op2, op3_val };
             } else if (opcode == "PRINT") {
-                // CRITICAL: Ensure we ONLY pick from process_var_names
                 // Check process_var_names again for safety, though it should not be empty
-                if (process_var_names.empty()) { 
-                    inst.args = { "Main Hello (no vars)!" };
-                } else {
+                if (!process_var_names.empty()) {
                     std::string var_to_print = process_var_names[rand() % process_var_names.size()];
-                    inst.args = { "Value of ", var_to_print, ": ", var_to_print };
+                    // FIX: Generate a simple, single-argument instruction.
+                    inst.args = { var_to_print };
                 }
             } else if (opcode == "SLEEP") {
                 inst.args = { std::to_string(rand() % 10 + 1) };
@@ -168,13 +166,13 @@ Process* create_random_process() {
 
     // Assign all virtual pages that comprise the process's total virtual memory (mem_per_proc).
     // This defines the full virtual address space for the process.
-    int total_virtual_pages = global_config.mem_per_proc / global_config.mem_per_frame;
+    size_t total_virtual_pages = memory_required / global_config.mem_per_frame;
     // Account for any remainder in the last page
-    if (global_config.mem_per_proc % global_config.mem_per_frame != 0) { 
+    if (memory_required % global_config.mem_per_frame != 0) {
         total_virtual_pages++;
     }
     // Ensure at least one virtual page if mem_per_proc is very small but greater than 0
-    if (total_virtual_pages == 0 && global_config.mem_per_proc > 0) { 
+    if (total_virtual_pages == 0 && memory_required > 0) {
         total_virtual_pages = 1;
     }
 
@@ -192,44 +190,63 @@ Process* create_random_process() {
     return p;
 }
     
-// --- Process Generator Thread (No change apart from `create_random_process` call) ---
+// --- Process Generator Thread ---
 void process_generator_thread() {
     uint64_t last_gen_tick = 0;
     while (system_running) {
         if (generating_processes) {
             uint64_t current_tick = cpu_ticks.load();
 
+            // --- A: RETRY PENDING PROCESSES ---
+            // On every cycle, first check if any processes are waiting for memory.
+            if (!pending_memory_queue.empty()) {
+                std::lock_guard<std::mutex> lock(queue_mutex);
+                int pending_count = pending_memory_queue.size();
+                for (int i = 0; i < pending_count; ++i) {
+                    Process* proc_to_retry = pending_memory_queue.front();
+                    pending_memory_queue.pop();
+
+                    // Try to register with memory manager again
+                    if (global_mem_manager->createProcess(*proc_to_retry)) {
+                        // SUCCESS! Move it to the ready queue.
+                        std::cout << "[Generator] Successfully allocated memory for pending process " << proc_to_retry->name << std::endl;
+                        ready_queue.push(proc_to_retry);
+                        queue_cv.notify_one();
+                    }
+                    else {
+                        // FAILED AGAIN. Put it back at the end of the pending queue to try later.
+                        pending_memory_queue.push(proc_to_retry);
+                    }
+                }
+            }
+
+            // --- B: GENERATE NEW PROCESS ---
+            // This logic only runs if the frequency condition is met.
             if (global_config.batch_process_freq > 0 &&
                 current_tick > last_gen_tick &&
                 current_tick % global_config.batch_process_freq == 0) {
 
                 last_gen_tick = current_tick;
 
-                Process* new_proc = create_random_process();
+                Process* new_proc = create_random_process(global_config.mem_per_proc);
 
-                // Check if MemoryManager successfully created the process entry
-                // (which includes setting up its page table but not yet allocating physical frames).
-                if (!global_mem_manager->createProcess(*new_proc, global_config.mem_per_proc)) {
-                    // Memory full or other error during MemoryManager's process creation.
-                    // Re-queue the process to try again later.
-                    {
-                        std::lock_guard<std::mutex> lock(queue_mutex);
-                        ready_queue.push(new_proc); 
-                    }
-                    // It's crucial not to delete new_proc here, as it's still in the queue.
-                    continue; // Skip the rest of this iteration if creation failed
-                }
-
-                // If process creation was successful, add it to the master list and ready queue.
-                {
+                // Attempt to register with the memory manager.
+                if (global_mem_manager->createProcess(*new_proc)) {
+                    // SUCCESS! Add to the master list and the ready queue.
                     std::lock_guard<std::mutex> lock(queue_mutex);
                     process_list.push_back(new_proc);
                     ready_queue.push(new_proc);
+                    queue_cv.notify_one();
                 }
-
-                queue_cv.notify_one(); // Notify a CPU core that there's work
+                else {
+                    // FAILED. Add to the master list and the PENDING queue.
+                    std::cout << "[Generator] Memory full. Moving new process " << new_proc->name << " to pending queue." << std::endl;
+                    std::lock_guard<std::mutex> lock(queue_mutex);
+                    process_list.push_back(new_proc); // MUST add to master list to prevent memory leak on shutdown.
+                    pending_memory_queue.push(new_proc);
+                }
             }
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(5)); // Small sleep to prevent busy-waiting
+        std::this_thread::sleep_for(std::chrono::milliseconds(20)); // Sleep slightly longer to let CPUs work
     }
 }

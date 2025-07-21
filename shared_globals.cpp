@@ -25,6 +25,7 @@ std::mutex queue_mutex;
 std::condition_variable queue_cv;
 std::queue<Process*> ready_queue;
 std::vector<Process*> process_list;
+std::queue<Process*> pending_memory_queue;
 std::vector<bool> core_busy;
 
 // --- Utility Function Definitions ---

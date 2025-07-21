@@ -6,10 +6,11 @@
 // The main loop for the thread that increments the global CPU tick counter.
 void clock_thread();
 
+// Creates a new random process
+Process* create_random_process(size_t memory_size);
+
 // The main loop for the thread that generates processes.
 void process_generator_thread();
 
-// Creates a new random process
-Process* create_random_process();
 
 #endif // SCHEDULER_H

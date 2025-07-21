@@ -43,7 +43,7 @@ void start_cpu_cores() {
 }
 
 // helper func, refractored -s -r into one function.
-void enter_process_screen(const std::string& process_name, bool allow_create) {
+void enter_process_screen(const std::string& process_name, bool allow_create, size_t memory_size = 0) {
     Process* target_process = nullptr;
 
     {
@@ -64,8 +64,15 @@ void enter_process_screen(const std::string& process_name, bool allow_create) {
 
     // Create new process if allowed
     if (!target_process && allow_create) {
-        target_process = create_random_process();
+        target_process = create_random_process(memory_size);
         target_process->name = process_name;
+
+
+        if (!global_mem_manager->createProcess(*target_process)) {
+            std::cout << "Failed to create process <" << process_name << ">. Not enough memory or process ID conflict.\n";
+            delete target_process; // Clean up memory if registration fails.
+            return;
+        }
 
         {
             std::lock_guard<std::mutex> lock(queue_mutex);
@@ -222,8 +229,8 @@ void cli_loop() {
         }
 
         std::stringstream ss(line);
-        std::string command, arg1, arg2;
-        ss >> command >> arg1 >> arg2;
+        std::string command, arg1, arg2, arg3;
+        ss >> command >> arg1 >> arg2 >> arg3;
 
         if (command.empty()) continue;
 
@@ -233,7 +240,7 @@ void cli_loop() {
             break;
         }
         if (command == "clear") {
-            clear_console();
+            clear_console();    
             print_header();
             continue;
         }
@@ -291,14 +298,30 @@ void cli_loop() {
             if (arg1 == "-ls") {
                 generate_system_report(std::cout);
             }
-            else if ((arg1 == "-s" || arg1 == "-r") && !arg2.empty()) {
-                bool allow_create = (arg1 == "-s");
-                enter_process_screen(arg2, allow_create);
+            else if (arg1 == "-s" && !arg2.empty() && !arg3.empty()) {
+                size_t mem_size = 0;
+                try {
+                    unsigned long long val = std::stoull(arg3);
+                    if (val > 0 && (val & (val - 1)) == 0) { // Check power of 2
+                        mem_size = static_cast<size_t>(val);
+                    }
+                }
+                catch (...) { /* Conversion failed */ }
+
+                if (mem_size >= 64 && mem_size <= 65536) {
+                    enter_process_screen(arg2, true, mem_size);
+                }
+                else {
+                    std::cout << "Invalid memory allocation size. Must be a power of 2 between 64 and 65536.\n";
+                }
+            }
+            else if (arg1 == "-r" && !arg2.empty()) {
+                enter_process_screen(arg2, false);
             }
             else {
                 std::cout << "Invalid screen usage. Try one of:\n";
                 std::cout << "  screen -ls\n";
-                std::cout << "  screen -s <process name>\n";
+                std::cout << "  screen -s <process name> <process_memory_size>\n";
                 std::cout << "  screen -r <process name>\n";
             }
         }

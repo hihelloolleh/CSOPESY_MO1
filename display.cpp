@@ -96,6 +96,8 @@ void display_process_view(Process* process) {
     // --- Header Information ---
     std::cout << std::left << std::setw(28) << "Process name:" << process->name << "\n";
     std::cout << std::left << std::setw(28) << "ID:" << process->id << "\n";
+    std::cout << std::left << std::setw(28) << "Memory (bytes):"
+		<< process->memory_required << "\n";
     
     // --- Logs Section ---
     std::cout << "\nLogs:\n";

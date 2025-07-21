@@ -15,7 +15,7 @@ class MemoryManager {
 public:
     MemoryManager(const Config& config);
 
-    bool createProcess(const Process& proc, size_t memoryRequired);
+    bool createProcess(const Process& proc);
     void removeProcess(int pid);
 
     bool readMemory(int pid, uint16_t address, uint16_t& value);
@@ -38,6 +38,8 @@ private:
     size_t totalMemory;
     size_t frameSize;
     size_t totalFrames;
+
+    std::mutex manager_mutex;
 
     std::vector<std::vector<uint8_t>> physicalMemory;
     std::vector<bool> frameOccupied;
