@@ -3,12 +3,11 @@
 #include <iomanip>
 #include <sstream>
 
-
 // --- System Clock Definition ---
 std::atomic<uint64_t> cpu_ticks(0);
 
 // --- Process Generation Definition ---
-std::atomic<bool> generating_processes(false); // Starts in the "off" state
+std::atomic<bool> generating_processes(false);
 
 // --- Global State Definitions ---
 std::atomic<bool> system_running(true);
@@ -17,7 +16,7 @@ std::atomic<bool> is_initialized(false);
 // --- Configuration Definition ---
 Config global_config;
 
-// --- Memory Management Definitions ---
+// --- Memory Manager Definition ---
 MemoryManager* global_mem_manager = nullptr;
 
 // --- Process Management Definitions ---
@@ -28,21 +27,20 @@ std::vector<Process*> process_list;
 std::queue<Process*> pending_memory_queue;
 std::vector<bool> core_busy;
 
-// --- Utility Function Definitions ---
-// Extracted from fcfs-2.cpp
+// --- Utility Definitions ---
+std::atomic<int> global_quantum_cycle = 0;
+
 std::string get_timestamp() {
     auto now = std::chrono::system_clock::now();
     time_t time = std::chrono::system_clock::to_time_t(now);
     tm local_tm;
-    #if defined(_WIN32) || defined(_WIN64)
-        localtime_s(&local_tm, &time); // Windows
-    #else
-        localtime_r(&time, &local_tm); // POSIX (macOS/Linux)
-    #endif
+#if defined(_WIN32) || defined(_WIN64)
+    localtime_s(&local_tm, &time); // Windows
+#else
+    localtime_r(&time, &local_tm); // POSIX (macOS/Linux)
+#endif
 
     std::stringstream ss;
     ss << std::put_time(&local_tm, "(%m/%d/%Y %I:%M:%S%p)");
     return ss.str();
 }
-
-std::atomic<int> global_quantum_cycle = 0; //Quantum Cycle

@@ -3,14 +3,15 @@
 
 #include "config.h"
 #include "process.h"
-#include "mem_manager.h"
-#include "cpu_core.h"
+// --- FORWARD DECLARE MEMORYMANAGER TO AVOID CIRCULAR DEPENDENCY ---
+class MemoryManager;
+// ---
 #include <mutex>
 #include <condition_variable>
 #include <queue>
 #include <atomic>
 #include <vector>
-#include <cstdint> // For uint64_t
+#include <cstdint>
 
 // --- System Clock ---
 extern std::atomic<uint64_t> cpu_ticks;
@@ -25,22 +26,19 @@ extern std::atomic<bool> is_initialized;
 // --- Configuration ---
 extern Config global_config;
 
-// --- Memory Management ---
+// --- Memory Manager ---
 extern MemoryManager* global_mem_manager;
 
 // --- Process Management ---
-extern std::mutex queue_mutex;
+extern std::mutex queue_mutex; 
 extern std::condition_variable queue_cv;
 extern std::queue<Process*> ready_queue;
-extern std::vector<Process*> process_list; // Master list of all processes created
+extern std::vector<Process*> process_list;
 extern std::queue<Process*> pending_memory_queue;
-extern std::vector<bool> core_busy; // Track which cores are currently busy
+extern std::vector<bool> core_busy;
 
 // --- Utility ---
 std::string get_timestamp();
-
-// Quantum Cycle
 extern std::atomic<int> global_quantum_cycle;
-constexpr int SNAPSHOT_INTERVAL = 100;
 
 #endif // SHARED_GLOBALS_H

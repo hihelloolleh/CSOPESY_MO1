@@ -2,6 +2,7 @@
 #include "shared_globals.h"
 #include "instructions.h"
 #include "scheduler_utils.h"
+#include "mem_manager.h" 
 
 #include <iostream>
 #include <thread>
@@ -18,36 +19,22 @@ void cpu_core_worker(int core_id) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(1));
                 continue;
             }
-
             process = select_process();
         }
-
+        
         if (!process) continue;
 
-        // Skip processes that are already finished or crashed
         if (process->state == ProcessState::FINISHED || process->state == ProcessState::CRASHED) {
-            // Put it back in the queue so it doesn't get lost, but don't process it.
-            // This prevents a core from spinning on a finished process.
-            std::lock_guard<std::mutex> lock(queue_mutex);
-            ready_queue.push(process);
-            std::this_thread::sleep_for(std::chrono::milliseconds(5)); // small delay
             continue;
         }
 
         if (global_mem_manager->getProcess(process->id) == nullptr) {
-            if (!global_mem_manager->createProcess(*process)) {
-                
-                {
-                    std::lock_guard<std::mutex> lock(queue_mutex);
-                    ready_queue.push(process);
-                }
-                std::this_thread::sleep_for(std::chrono::milliseconds(5));
-                continue;
-            }
+            std::cerr << "Error: Process " << process->id << " started on core but not in Memory Manager.\n";
+            continue;
         }
 
         process->assigned_core = core_id;
-        process->last_core = core_id; 
+        process->last_core = core_id;
         if (process->start_time.empty()) {
             process->start_time = get_timestamp();
         }
@@ -57,7 +44,9 @@ void cpu_core_worker(int core_id) {
             if (core_id < core_busy.size()) core_busy[core_id] = true;
         }
 
-        int quantum = global_config.quantum_cycles;
+        // --- THIS LINE IS REMOVED TO FIX THE WARNING ---
+        // int quantum = global_config.quantum_cycles; 
+        
         bool preempt = should_preempt();
         bool use_quantum = uses_quantum();
 
@@ -70,15 +59,13 @@ void cpu_core_worker(int core_id) {
                 if (global_mem_manager) {
                     global_quantum_cycle++;
                     global_mem_manager->snapshotMemory(global_quantum_cycle);
-
                 }
-
+                
                 {
                     std::lock_guard<std::mutex> lock(queue_mutex);
                     ready_queue.push(process);
                 }
                 process->assigned_core = -1;
-
                 break;
             }
 
@@ -88,6 +75,7 @@ void cpu_core_worker(int core_id) {
                         std::lock_guard<std::mutex> lock(queue_mutex);
                         ready_queue.push(process);
                     }
+                    process->assigned_core = -1;
                     break;
                 }
                 else {
@@ -97,31 +85,17 @@ void cpu_core_worker(int core_id) {
 
             execute_instruction(process);
             if (process->state == ProcessState::CRASHED) {
-                // A crash marks the process as finished, so just break the loop.
-                // Memory will be cleaned up by the logic that handles finished processes.
                 break;
             }
 
             if (process->program_counter >= process->instructions.size() && process->for_stack.empty()) {
                 process->state = ProcessState::FINISHED;
-                continue; // Loop will terminate on the next check
+                continue;
             }
-
-
-            // Instead of just incrementing cpu_ticks, simulate real time:
-            if (process->state == ProcessState::WAITING) {
-                {
-                    std::lock_guard<std::mutex> lock(queue_mutex);
-                    ready_queue.push(process);
-                }
-                process->assigned_core = -1;
-                break;  // Do NOT advance program_counter
-            }
-
+            
             std::this_thread::sleep_for(std::chrono::milliseconds(global_config.delay_per_exec));
             cpu_ticks++;
         }
-
 
         if (process->state == ProcessState::FINISHED || process->state == ProcessState::CRASHED) {
             process->end_time = get_timestamp();

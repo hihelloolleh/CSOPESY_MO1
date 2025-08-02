@@ -3,16 +3,14 @@
 
 #include <string>
 #include <vector>
-#include <map>      // Now for mapping variable names to virtual addresses
-#include <cstdint>  // For uint16_t
-#include <stack>    // For FOR loop context
-#include <algorithm>
-#include <optional> // For optional faulting address
+#include <map>
+#include <cstdint>
+#include <stack>
+#include <optional>
 
 struct Instruction {
     std::string opcode;
     std::vector<std::string> args;
-
     std::vector<Instruction> sub_instructions;
 };
 
@@ -35,18 +33,20 @@ struct Process {
     int id;
     std::string name;
 
+    // --- MEMORY-RELATED FIELDS ---
     size_t memory_required = 0;
+    std::map<std::string, uint16_t> variable_virtual_addresses;
+    uint16_t next_available_variable_address = 0;
+    std::optional<uint16_t> faulting_address;
+    
+    // These vectors are used by your mem_manager to build its page table.
+    std::vector<int> insPages;
+    std::vector<int> varPages;
+    // --- END MEMORY-RELATED FIELDS ---
 
     std::vector<Instruction> instructions;
     int program_counter = 0;
     
-    std::map<std::string, uint16_t> variable_virtual_addresses;
-    uint16_t next_available_variable_address = 0; // Tracks the next available virtual address for a new variable
-    std::optional<uint16_t> faulting_address;
-
-    std::vector<int> insPages; 
-    std::vector<int> varPages;
-
     int assigned_core = -1;
     bool finished = false;
     std::string start_time;
@@ -64,9 +64,7 @@ struct Process {
     Process() : id(0), name("") {}
 
     Process(int pid_, const std::string& name_)
-        : id(pid_), name(name_) {
-    }
+        : id(pid_), name(name_) {}
 };
-
 
 #endif // PROCESS_H
