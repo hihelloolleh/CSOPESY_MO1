@@ -1,6 +1,6 @@
 #include "instructions.h"
 #include "shared_globals.h"
-#include "mem_manager.h" // <<< FIXES ERRORS
+#include "mem_manager.h"
 #include <iostream>
 #include <sstream>
 #include <cstdint>
@@ -17,27 +17,39 @@ bool is_number(const std::string& s) {
     return std::all_of(s.begin() + start_idx, s.end(), ::isdigit);
 }
 
-uint16_t get_or_assign_variable_virtual_address(Process* process, const std::string& var_name) {
-    if (process->variable_virtual_addresses.count(var_name)) {
-        return process->variable_virtual_addresses[var_name];
-    } else {
-        uint16_t new_addr = process->next_available_variable_address;
-        
-        // --- CORRECTED LOGIC ---
-        if (new_addr + sizeof(uint16_t) > process->memory_required) {
-            std::cerr << "[ERROR] P" << process->id << ": CRITICAL - Memory allocation failed. Exceeded process memory limit ("
-                      << process->memory_required << " bytes) for variable '"
-                      << var_name << "'.\n";
+// --- PHASE 3: This helper now calculates absolute addresses from data segment offsets ---
+uint16_t get_variable_address(Process* process, const std::string& var_name, bool create_if_new) {
+    // The data segment starts right after the instruction segment.
+    const uint16_t data_segment_start = process->instruction_segment_size;
+
+    if (process->variable_data_offsets.count(var_name)) {
+        // Variable exists, return its absolute virtual address.
+        return data_segment_start + process->variable_data_offsets[var_name];
+    } 
+    else if (create_if_new) {
+        // Variable is new, assign it a new offset in the data segment.
+        uint16_t new_offset = process->next_available_variable_offset;
+        uint16_t new_absolute_addr = data_segment_start + new_offset;
+
+        // Check if the new variable exceeds the process's total allocated memory.
+        if (new_absolute_addr + sizeof(uint16_t) > process->memory_required) {
+            std::cerr << "[ERROR] P" << process->id << ": SEGFAULT - Data segment overflow on creating variable '"
+                      << var_name << "'. Limit: " << process->memory_required << " bytes.\n";
             process->state = ProcessState::CRASHED;
-            process->faulting_address = new_addr;
+            process->faulting_address = new_absolute_addr;
             return 0;
         }
 
-        process->variable_virtual_addresses[var_name] = new_addr;
-        process->next_available_variable_address += sizeof(uint16_t);
+        process->variable_data_offsets[var_name] = new_offset;
+        process->next_available_variable_offset += sizeof(uint16_t);
         
-        return new_addr;
+        return new_absolute_addr;
     }
+    
+    // If we get here, the variable was not found and we were not allowed to create it.
+    std::cerr << "[ERROR] P" << process->id << ": SEGFAULT - Use of undeclared variable '" << var_name << "'.\n";
+    process->state = ProcessState::CRASHED;
+    return 0;
 }
 
 uint16_t read_variable_value(Process* process, const std::string& arg) {
@@ -53,8 +65,11 @@ uint16_t read_variable_value(Process* process, const std::string& arg) {
         catch (...) { process->state = ProcessState::CRASHED; return 0; }
     }
     else {
-        uint16_t var_addr = get_or_assign_variable_virtual_address(process, arg);
+        // On a read, the variable must already exist. `create_if_new` is false.
+        uint16_t var_addr = get_variable_address(process, arg, false);
         if (process->state == ProcessState::CRASHED) return 0;
+
+        // The MemoryManager will handle the data page fault if necessary.
         if (!global_mem_manager->readMemory(process->id, var_addr, value)) {
             process->state = ProcessState::CRASHED;
             process->faulting_address = var_addr;
@@ -65,14 +80,18 @@ uint16_t read_variable_value(Process* process, const std::string& arg) {
 }
 
 void write_variable_value(Process* process, const std::string& dest_var_name, uint16_t value) {
-    uint16_t var_addr = get_or_assign_variable_virtual_address(process, dest_var_name);
+    // On a write (like from DECLARE or ADD), we can create the variable. `create_if_new` is true.
+    uint16_t var_addr = get_variable_address(process, dest_var_name, true);
     if (process->state == ProcessState::CRASHED) return;
+
+    // The MemoryManager will handle the data page fault if necessary.
     if (!global_mem_manager->writeMemory(process->id, var_addr, value)) {
         process->state = ProcessState::CRASHED;
         process->faulting_address = var_addr;
     }
 }
 
+// --- The rest of these functions are UNCHANGED ---
 void execute_instruction(Process* process) {
     if (process->state == ProcessState::CRASHED) return;
     if (!process->for_stack.empty()) {

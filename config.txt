@@ -1,12 +1,12 @@
 # config.txt
 num-cpu 4
 scheduler "rr"
-quantum-cycles 10
-batch-process-freq 500
+quantum-cycles 5000
+batch-process-freq 1
 
 # --- THE IMPORTANT CHANGES ARE HERE ---
-min-ins 500         # Give processes a lot more work to do
-max-ins 1000        # A much larger range of instructions
+min-ins 8000         # Give processes a lot more work to do
+max-ins 10000        # A much larger range of instructions
 delay-per-exec 10   # The MOST IMPORTANT CHANGE: Slows down the CPU
                     # This adds a 10 millisecond delay after each instruction.
 

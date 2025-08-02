@@ -1,0 +1,148 @@
+--- Memory Snapshot at Tick: 23500 ---
+
+Physical Memory: 0KB Used, 15KB Free (3/64 frames)
+Page Faults: 3 | Dirty Evictions: 0
+
+Memory Layout (Address = Frame * 256):
+   Address   Frame #       Content
+------------------------------------------
+0         0         P1 (p1), Page 0
+256       1         P2 (p2), Page 0
+512       2         P3 (p3), Page 0
+768       3         [Free]
+1024      4         [Free]
+1280      5         [Free]
+1536      6         [Free]
+1792      7         [Free]
+2048      8         [Free]
+2304      9         [Free]
+2560      10        [Free]
+2816      11        [Free]
+3072      12        [Free]
+3328      13        [Free]
+3584      14        [Free]
+3840      15        [Free]
+4096      16        [Free]
+4352      17        [Free]
+4608      18        [Free]
+4864      19        [Free]
+5120      20        [Free]
+5376      21        [Free]
+5632      22        [Free]
+5888      23        [Free]
+6144      24        [Free]
+6400      25        [Free]
+6656      26        [Free]
+6912      27        [Free]
+7168      28        [Free]
+7424      29        [Free]
+7680      30        [Free]
+7936      31        [Free]
+8192      32        [Free]
+8448      33        [Free]
+8704      34        [Free]
+8960      35        [Free]
+9216      36        [Free]
+9472      37        [Free]
+9728      38        [Free]
+9984      39        [Free]
+10240     40        [Free]
+10496     41        [Free]
+10752     42        [Free]
+11008     43        [Free]
+11264     44        [Free]
+11520     45        [Free]
+11776     46        [Free]
+12032     47        [Free]
+12288     48        [Free]
+12544     49        [Free]
+12800     50        [Free]
+13056     51        [Free]
+13312     52        [Free]
+13568     53        [Free]
+13824     54        [Free]
+14080     55        [Free]
+14336     56        [Free]
+14592     57        [Free]
+14848     58        [Free]
+15104     59        [Free]
+15360     60        [Free]
+15616     61        [Free]
+15872     62        [Free]
+16128     63        [Free]
+
+--- Process Page Tables ---
+PID: 3 (p3) - Requires: 1024 bytes
+  - Virt Page 0 -> Phys Frame 2 [Dirty]
+  - Virt Page 1 -> On Disk
+  - Virt Page 2 -> On Disk
+  - Virt Page 3 -> On Disk
+
+PID: 2 (p2) - Requires: 8192 bytes
+  - Virt Page 0 -> Phys Frame 1 [Dirty]
+  - Virt Page 1 -> On Disk
+  - Virt Page 2 -> On Disk
+  - Virt Page 3 -> On Disk
+  - Virt Page 4 -> On Disk
+  - Virt Page 5 -> On Disk
+  - Virt Page 6 -> On Disk
+  - Virt Page 7 -> On Disk
+  - Virt Page 8 -> On Disk
+  - Virt Page 9 -> On Disk
+  - Virt Page 10 -> On Disk
+  - Virt Page 11 -> On Disk
+  - Virt Page 12 -> On Disk
+  - Virt Page 13 -> On Disk
+  - Virt Page 14 -> On Disk
+  - Virt Page 15 -> On Disk
+  - Virt Page 16 -> On Disk
+  - Virt Page 17 -> On Disk
+  - Virt Page 18 -> On Disk
+  - Virt Page 19 -> On Disk
+  - Virt Page 20 -> On Disk
+  - Virt Page 21 -> On Disk
+  - Virt Page 22 -> On Disk
+  - Virt Page 23 -> On Disk
+  - Virt Page 24 -> On Disk
+  - Virt Page 25 -> On Disk
+  - Virt Page 26 -> On Disk
+  - Virt Page 27 -> On Disk
+  - Virt Page 28 -> On Disk
+  - Virt Page 29 -> On Disk
+  - Virt Page 30 -> On Disk
+  - Virt Page 31 -> On Disk
+
+PID: 1 (p1) - Requires: 8192 bytes
+  - Virt Page 0 -> Phys Frame 0 [Dirty]
+  - Virt Page 1 -> On Disk
+  - Virt Page 2 -> On Disk
+  - Virt Page 3 -> On Disk
+  - Virt Page 4 -> On Disk
+  - Virt Page 5 -> On Disk
+  - Virt Page 6 -> On Disk
+  - Virt Page 7 -> On Disk
+  - Virt Page 8 -> On Disk
+  - Virt Page 9 -> On Disk
+  - Virt Page 10 -> On Disk
+  - Virt Page 11 -> On Disk
+  - Virt Page 12 -> On Disk
+  - Virt Page 13 -> On Disk
+  - Virt Page 14 -> On Disk
+  - Virt Page 15 -> On Disk
+  - Virt Page 16 -> On Disk
+  - Virt Page 17 -> On Disk
+  - Virt Page 18 -> On Disk
+  - Virt Page 19 -> On Disk
+  - Virt Page 20 -> On Disk
+  - Virt Page 21 -> On Disk
+  - Virt Page 22 -> On Disk
+  - Virt Page 23 -> On Disk
+  - Virt Page 24 -> On Disk
+  - Virt Page 25 -> On Disk
+  - Virt Page 26 -> On Disk
+  - Virt Page 27 -> On Disk
+  - Virt Page 28 -> On Disk
+  - Virt Page 29 -> On Disk
+  - Virt Page 30 -> On Disk
+  - Virt Page 31 -> On Disk
+
