@@ -24,7 +24,7 @@ void handle_sleep(Process* process, const Instruction& instr);
 void handle_for(Process* process, const Instruction& instr);
 
 // Helper functions for memory interaction that fulfill Phase 2 requirements
-uint16_t get_or_assign_variable_virtual_address(Process* process, const std::string& var_name);
+uint16_t get_variable_address(Process* process, const std::string& var_name, bool create_if_new);
 uint16_t read_variable_value(Process* process, const std::string& arg);
 void write_variable_value(Process* process, const std::string& dest_var_name, uint16_t value);
 

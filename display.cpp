@@ -2,6 +2,7 @@
 
 #include "display.h"
 #include "shared_globals.h"
+#include "mem_manager.h"
 #include <iostream>
 #include <iomanip>     
 #include <mutex>       
@@ -117,5 +118,41 @@ void display_process_view(Process* process) {
     // --- Finished Message ---
     if (process->finished) {
         std::cout << "Finished!\n\n";
+    }
+}
+
+void show_global_process_smi() {
+    std::cout << "| PROCESS-SMI V01.00 Driver Version: 01.00 |\n";
+    std::cout << "--------------------------------------------\n";
+
+    // TODO: Replace with real CPU usage if available
+    std::cout << "CPU-Util:       0%\n";
+
+    if (global_mem_manager) {
+        size_t used, total;
+        std::tie(used, total) = global_mem_manager->getMemoryUsageStats();
+
+        size_t usedMiB = used / (1024 * 1024);
+        size_t totalMiB = total / (1024 * 1024);
+        float memUtil = total ? (100.0f * used / total) : 0.0f;
+
+        std::cout << "Memory Usage:   " << usedMiB << "MiB / " << totalMiB << "MiB\n";
+        std::cout << "Memory Util:    " << static_cast<int>(memUtil) << "%\n";
+    }
+    else {
+        std::cout << "Memory Usage:   N/A\n";
+        std::cout << "Memory Util:    N/A\n";
+    }
+
+    std::cout << "\nRunning processes and memory usage:\n";
+    std::cout << "-----------------------------------\n";
+
+    if (global_mem_manager) {
+        auto lock = global_mem_manager->lockManager();
+        for (const auto& [pid, pcb] : global_mem_manager->getProcessTable()) {
+            size_t memKB = pcb.getMemoryRequirement() / 1024;
+            std::cout << "P" << pid << " (" << pcb.getName() << ") - "
+                << memKB << "KB (" << pcb.pageTable.size() << " pages)\n";
+        }
     }
 }

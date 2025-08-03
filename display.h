@@ -10,4 +10,6 @@ void generate_system_report(std::ostream& output_stream);
 
 void display_process_view(Process* process);
 
+void show_global_process_smi();
+
 #endif // DISPLAY_H

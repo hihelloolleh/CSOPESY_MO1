@@ -20,7 +20,7 @@ bool is_number(const std::string& s) {
 // --- PHASE 3: This helper now calculates absolute addresses from data segment offsets ---
 uint16_t get_variable_address(Process* process, const std::string& var_name, bool create_if_new) {
     // The data segment starts right after the instruction segment.
-    const uint16_t data_segment_start = process->instruction_segment_size;
+    const uint32_t data_segment_start = process->instruction_segment_size; //MAY CAUSE THE MEMORY WARNINGS
 
     if (process->variable_data_offsets.count(var_name)) {
         // Variable exists, return its absolute virtual address.
@@ -31,10 +31,15 @@ uint16_t get_variable_address(Process* process, const std::string& var_name, boo
         uint16_t new_offset = process->next_available_variable_offset;
         uint16_t new_absolute_addr = data_segment_start + new_offset;
 
-        // Check if the new variable exceeds the process's total allocated memory.
+        std::cout << "[DEBUG] Attempting to declare " << var_name
+            << " at address " << new_absolute_addr
+            << " (used: " << (int)(new_offset + sizeof(uint16_t))
+            << " / " << (int)(process->memory_required - data_segment_start) << ")\n";
+
+        // ?? Now check for overflow
         if (new_absolute_addr + sizeof(uint16_t) > process->memory_required) {
             std::cerr << "[ERROR] P" << process->id << ": SEGFAULT - Data segment overflow on creating variable '"
-                      << var_name << "'. Limit: " << process->memory_required << " bytes.\n";
+                << var_name << "'. Limit: " << process->memory_required << " bytes.\n";
             process->state = ProcessState::CRASHED;
             process->faulting_address = new_absolute_addr;
             return 0;
@@ -71,7 +76,7 @@ uint16_t read_variable_value(Process* process, const std::string& arg) {
 
         // The MemoryManager will handle the data page fault if necessary.
         if (!global_mem_manager->readMemory(process->id, var_addr, value)) {
-            process->state = ProcessState::CRASHED;
+            process->had_page_fault = true;
             process->faulting_address = var_addr;
             return 0;
         }
@@ -86,7 +91,7 @@ void write_variable_value(Process* process, const std::string& dest_var_name, ui
 
     // The MemoryManager will handle the data page fault if necessary.
     if (!global_mem_manager->writeMemory(process->id, var_addr, value)) {
-        process->state = ProcessState::CRASHED;
+        process->had_page_fault = true;
         process->faulting_address = var_addr;
     }
 }
@@ -114,8 +119,11 @@ void execute_instruction(Process* process) {
     }
     if (process->program_counter >= process->instructions.size()) return;
     const Instruction& current_instruction = process->instructions[process->program_counter];
+    process->had_page_fault = false;
     dispatch_instruction(process, current_instruction);
-    if (current_instruction.opcode != "FOR") {
+
+    // Only advance if no page fault occurred
+    if (!process->had_page_fault && current_instruction.opcode != "FOR") {
         process->program_counter++;
     }
 }

@@ -41,7 +41,6 @@ void start_cpu_cores() {
 void enter_process_screen(const std::string& process_name, bool allow_create, size_t memory_size = 0) {
     Process* target_process = nullptr;
 
-    // Check if process already exists
     {
         std::lock_guard<std::mutex> lock(queue_mutex);
         for (auto& p : process_list) {
@@ -52,25 +51,22 @@ void enter_process_screen(const std::string& process_name, bool allow_create, si
         }
     }
 
-    // Create new process if allowed and it doesn't exist
     if (!target_process && allow_create) {
-        target_process = create_random_process(process_name, memory_size); // Pass memory size
-        
-        // Attempt to register with memory manager
+        target_process = create_random_process(process_name, memory_size);
+
         if (!global_mem_manager->createProcess(*target_process)) {
-            std::cout << "Failed to create process <" << process_name << ">. Not enough memory or process ID conflict.\n";
-            delete target_process; // Clean up memory if registration fails.
+            std::cout << "Failed to create process <" << process_name << ">.\n";
+            delete target_process;
             return;
         }
 
-        // Add to global lists and ready queue
         {
             std::lock_guard<std::mutex> lock(queue_mutex);
             process_list.push_back(target_process);
             ready_queue.push(target_process);
         }
         queue_cv.notify_one();
-        std::cout << "Process <" << process_name << "> created with " << memory_size << " bytes of memory.\n";
+        std::cout << "Process <" << process_name << "> created.\n";
     }
 
     if (!target_process) {
@@ -78,8 +74,111 @@ void enter_process_screen(const std::string& process_name, bool allow_create, si
         return;
     }
 
-    // Enter the interactive view for the process
-    display_process_view(target_process);
+    // === INTERACTIVE CLI FOR PROCESS ===
+    bool in_process_view = true;
+    while (in_process_view) {
+        std::cout << "root:\\" << process_name << "> ";
+        std::string process_command;
+        std::getline(std::cin, process_command);
+
+        if (process_command == "exit") {
+            in_process_view = false;
+        }
+        else if (process_command == "process-smi") {
+            show_global_process_smi();
+        }
+        else {
+            std::stringstream ss(process_command);
+            std::string opcode;
+            ss >> opcode;
+
+            if (target_process->finished && process_command != "exit" && process_command != "process-smi") {
+                std::cout << "Process has finished execution. Cannot modify instructions.\n";
+                continue;
+            }
+
+            if (opcode == "FOR") {
+                int repeat_count;
+                ss >> repeat_count;
+                if (repeat_count <= 0) {
+                    std::cout << "Invalid repeat count.\n";
+                    continue;
+                }
+
+                std::vector<Instruction> loop_body;
+                std::string loop_line;
+                std::cout << "Enter loop body (type ENDFOR to finish):\n";
+                while (true) {
+                    std::cout << ">> ";
+                    std::getline(std::cin, loop_line);
+                    if (loop_line == "ENDFOR") break;
+
+                    std::stringstream lss(loop_line);
+                    std::string sub_opcode;
+                    lss >> sub_opcode;
+
+                    Instruction sub_instr;
+                    sub_instr.opcode = sub_opcode;
+
+                    std::string arg;
+                    while (lss >> arg)
+                        sub_instr.args.push_back(arg);
+
+                    loop_body.push_back(sub_instr);
+                }
+
+                Instruction for_instr;
+                for_instr.opcode = "FOR";
+                for_instr.args = { std::to_string(repeat_count) };
+                for_instr.sub_instructions = loop_body;
+
+                target_process->instructions.push_back(for_instr);
+                std::cout << "Instructions in process:\n";
+                for (size_t i = 0; i < target_process->instructions.size(); ++i) {
+                    std::cout << i << ": " << target_process->instructions[i].opcode << "\n";
+                }
+
+                {
+                    std::lock_guard<std::mutex> lock(queue_mutex);
+                    ready_queue.push(target_process);
+                }
+                queue_cv.notify_one();
+            }
+            else if (
+                opcode == "DECLARE" || opcode == "ADD" || opcode == "SUBTRACT" ||
+                opcode == "PRINT" || opcode == "SLEEP"
+                ) {
+                Instruction instr;
+                instr.opcode = opcode;
+
+                std::string arg;
+                while (ss >> arg)
+                    instr.args.push_back(arg);
+
+                if (opcode == "SLEEP") {
+                    if (instr.args.empty() || !std::all_of(instr.args[0].begin(), instr.args[0].end(), ::isdigit)) {
+                        std::cout << "Invalid SLEEP duration.\n";
+                        continue;
+                    }
+                }
+
+                target_process->instructions.push_back(instr);
+                std::cout << "Instruction added: " << opcode << "\n";
+
+                {
+                    std::lock_guard<std::mutex> lock(queue_mutex);
+                    ready_queue.push(target_process);
+                }
+                queue_cv.notify_one();
+            }
+            else {
+                std::cout << "Unknown command. Try one of: ADD, SUBTRACT, DECLARE, PRINT, SLEEP, FOR, process-smi, exit.\n";
+            }
+        }
+    }
+
+    clear_console();
+    print_header();
 }
 
 void cli_loop() {
@@ -142,7 +241,10 @@ void cli_loop() {
         } else if (command == "scheduler-stop") {
             generating_processes = false;
             std::cout << "Process generator stopped." << std::endl;
-        } else if (command == "screen") {
+        } 
+        else if (command == "process-smi") {
+            show_global_process_smi();
+        }  else if (command == "screen") {
             if (arg1 == "-ls") {
                 generate_system_report(std::cout);
             } else if (arg1 == "-s" && !arg2.empty() && !arg3.empty()) {
@@ -158,7 +260,79 @@ void cli_loop() {
                 } catch (...) {
                     std::cout << "Invalid memory size format.\n";
                 }
-            } else if (arg1 == "-r" && !arg2.empty()) {
+
+            }
+
+            else if (arg1 == "-c" && !arg2.empty() && !arg3.empty()) {
+                std::string remaining_line;
+                std::getline(ss, remaining_line); // Get instruction string
+
+                // Remove possible surrounding quotes
+                if (!remaining_line.empty() && remaining_line.front() == '"') {
+                    remaining_line.erase(0, 1);
+                }
+                if (!remaining_line.empty() && remaining_line.back() == '"') {
+                    remaining_line.pop_back();
+                }
+
+                try {
+                    size_t mem_size = std::stoull(arg3);
+                    bool is_power_of_two = (mem_size > 0) && ((mem_size & (mem_size - 1)) == 0);
+                    if (!is_power_of_two || mem_size < 64 || mem_size > 65536) {
+                        std::cout << "Invalid memory size. Must be power of 2 between 64 and 65536.\n";
+                        return;
+                    }
+
+                    Process* new_proc = new Process(g_next_pid++, arg2, mem_size);
+                    new_proc->instruction_segment_size = 1024; // Example size; adjust as needed
+
+                    // Parse instructions
+                    std::stringstream instr_stream(remaining_line);
+                    std::string token;
+                    while (std::getline(instr_stream, token, ';')) {
+                        std::stringstream instr_line(token);
+                        std::string opcode;
+                        instr_line >> opcode;
+
+                        Instruction instr;
+                        instr.opcode = opcode;
+
+                        std::string arg;
+                        while (instr_line >> arg) {
+                            instr.args.push_back(arg);
+                        }
+
+                        new_proc->instructions.push_back(instr);
+                    }
+
+                    if (new_proc->instructions.size() < 1 || new_proc->instructions.size() > 50) {
+                        std::cout << "invalid command\n";
+                        delete new_proc;
+                        return;
+                    }
+
+                    // Register process with memory manager
+                    if (!global_mem_manager->createProcess(*new_proc)) {
+                        std::cout << "Memory allocation failed for process '" << arg2 << "'.\n";
+                        delete new_proc;
+                        return;
+                    }
+
+                    {
+                        std::lock_guard<std::mutex> lock(queue_mutex);
+                        process_list.push_back(new_proc);
+                        ready_queue.push(new_proc);
+                    }
+                    queue_cv.notify_one();
+
+                    std::cout << "Process '" << arg2 << "' created with instructions.\n";
+                }
+                catch (...) {
+                    std::cout << "Invalid arguments for screen -c\n";
+                }
+            }
+            
+            else if (arg1 == "-r" && !arg2.empty()) {
                 enter_process_screen(arg2, false);
             } else {
                 std::cout << "Invalid screen usage. Try 'screen -ls' or 'screen -s <name> <mem_size>'.\n";

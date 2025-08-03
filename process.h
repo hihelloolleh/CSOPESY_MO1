@@ -64,10 +64,22 @@ struct Process {
 
     std::stack<ForContext> for_stack;
 
-    Process() : id(0), name("") {}
+    bool had_page_fault = false; // in Process class
 
+    Process() : id(0), name("") {}
+   
     Process(int pid_, const std::string& name_)
         : id(pid_), name(name_) {}
+
+    Process(int pid_, const std::string& name_, size_t mem_required)
+        : id(pid_), name(name_), memory_required(mem_required) {
+        state = ProcessState::READY;
+        program_counter = 0;
+        assigned_core = -1;
+        finished = false;
+        next_available_variable_offset = 0;
+        instruction_segment_size = 1024; // Or set dynamically if needed
+    }
 };
 
 #endif // PROCESS_H

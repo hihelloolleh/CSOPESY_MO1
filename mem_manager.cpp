@@ -339,3 +339,15 @@ bool MemoryManager::isProcessActive(int pid) {
     std::lock_guard<std::mutex> lock(manager_mutex);
     return processTable.count(pid) > 0;
 }
+
+std::tuple<size_t, size_t> MemoryManager::getMemoryUsageStats() {
+    std::lock_guard<std::mutex> lock(manager_mutex);
+
+    size_t usedFrames = 0;
+    for (bool occupied : frameOccupied) {
+        if (occupied) ++usedFrames;
+    }
+
+    size_t usedBytes = usedFrames * frameSize;
+    return std::make_tuple(usedBytes, totalMemory);
+}

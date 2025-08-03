@@ -35,6 +35,18 @@ public:
     void snapshotMemory(int tick);
     void flushAsyncWrites();
 
+    std::tuple<size_t, size_t> getMemoryUsageStats();
+
+
+    const std::unordered_map<int, PCB>& getProcessTable() const {
+        return processTable;
+    }
+
+
+    std::unique_lock<std::mutex> lockManager() {
+        return std::unique_lock<std::mutex>(manager_mutex);
+    }
+
 private:
     // Core memory components
     size_t totalMemory;
@@ -64,4 +76,6 @@ private:
     std::mutex snapshot_mutex;
     std::string last_snapshot_signature;
     std::vector<std::future<void>> background_tasks;
+
+  
 };
