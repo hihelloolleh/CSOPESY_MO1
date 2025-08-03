@@ -91,6 +91,10 @@ Process* create_random_process(const std::string& name, size_t memory_size_overr
         }
     }
     
+    // --- FIX: Ensure the data segment starts on an even boundary ---
+    // This prevents writes from crossing page boundaries.
+    p->instruction_segment_size &= ~1; 
+
     return p;
 }
     
@@ -124,7 +128,7 @@ void process_generator_thread() {
                     std::lock_guard<std::mutex> lock(queue_mutex);
                     process_list.push_back(new_proc);
                     ready_queue.push(new_proc);
-                    queue_cv.notify_one();
+                    queue_cv.notify_all();
                 }
                 else {
                     std::cout << "[Generator] Memory full. Moving new process " << new_proc->name << " to pending queue." << std::endl;

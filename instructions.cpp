@@ -31,10 +31,12 @@ uint16_t get_variable_address(Process* process, const std::string& var_name, boo
         uint16_t new_offset = process->next_available_variable_offset;
         uint16_t new_absolute_addr = data_segment_start + new_offset;
 
+        /*
         std::cout << "[DEBUG] Attempting to declare " << var_name
             << " at address " << new_absolute_addr
             << " (used: " << (int)(new_offset + sizeof(uint16_t))
             << " / " << (int)(process->memory_required - data_segment_start) << ")\n";
+        */
 
         // ?? Now check for overflow
         if (new_absolute_addr + sizeof(uint16_t) > process->memory_required) {

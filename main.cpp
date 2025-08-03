@@ -65,7 +65,7 @@ void enter_process_screen(const std::string& process_name, bool allow_create, si
             process_list.push_back(target_process);
             ready_queue.push(target_process);
         }
-        queue_cv.notify_one();
+        queue_cv.notify_all();
         std::cout << "Process <" << process_name << "> created.\n";
     }
 

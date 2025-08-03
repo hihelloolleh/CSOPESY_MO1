@@ -185,7 +185,7 @@ void MemoryManager::pageIn(PCB& pcb, Page& page) {
     frameQueue.push(frameIndex);
 
     pageFaults++;
-    std::cout << "[MemManager] Page fault for P" << pcb.getPid() << " Page " << page.pageNumber << ". Loaded into Frame " << frameIndex << ".\n";
+    //std::cout << "[MemManager] Page fault for P" << pcb.getPid() << " Page " << page.pageNumber << ". Loaded into Frame " << frameIndex << ".\n";
 }
 
 void MemoryManager::pageOut(int frameIndex) {
@@ -205,7 +205,7 @@ void MemoryManager::pageOut(int frameIndex) {
 
     Page& page = pcb.pageTable[pageNum];
 
-    std::cout << "[MemManager] Evicting Page " << page.pageNumber << " of P" << pid << " from Frame " << frameIndex << ".\n";
+    //std::cout << "[MemManager] Evicting Page " << page.pageNumber << " of P" << pid << " from Frame " << frameIndex << ".\n";
     
     if (page.dirty) {
         pageEvictions++;

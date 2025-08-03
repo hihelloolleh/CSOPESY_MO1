@@ -44,9 +44,11 @@ void cpu_core_worker(int core_id) {
                 //    and will return true if a page fault just occurred.
                 if (global_mem_manager->touchPage(process->id, instruction_address)) {
                     // A page fault for an instruction happened! The process must wait.
+                    /*
                     std::cout << "[CPU Core " << core_id << "] P" << process->id 
                               << ": Instruction page fault at address " << instruction_address 
                               << ". Yielding CPU." << std::endl;
+                    */
                     process->state = ProcessState::WAITING; // Mark as waiting for I/O
                     break; // Break out of the execution loop to yield the CPU core.
                 }
@@ -75,6 +77,8 @@ void cpu_core_worker(int core_id) {
 
             {
                 std::lock_guard<std::mutex> lock(queue_mutex);
+                bool work_was_added = false; // A flag to see if we need to notify
+
                 // The process's turn is over, figure out where it goes next.
                 if (process->state == ProcessState::RUNNING) {
                     // It was still running (quantum expired or finished).
@@ -99,6 +103,8 @@ void cpu_core_worker(int core_id) {
                     process->end_time = get_timestamp();
                     global_mem_manager->removeProcess(process->id);
                 }
+
+                queue_cv.notify_all();
             }
         }
     }

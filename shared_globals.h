@@ -3,7 +3,7 @@
 
 #include "config.h"
 #include "process.h"
-// --- FORWARD DECLARE MEMORYMANAGER TO AVOID CIRCULAR DEPENDENCY ---
+// --- FORWARD DECLARE MEMORY MANAGER TO AVOID CIRCULAR DEPENDENCY ---
 class MemoryManager;
 // ---
 #include <mutex>
