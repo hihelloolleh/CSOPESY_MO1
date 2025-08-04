@@ -199,3 +199,27 @@ void show_global_process_smi() {
     }
     std::cout << "-----------------------------------\n";
 }
+
+void show_vmstat() {
+    size_t used, total;
+    std::tie(used, total) = global_mem_manager->getMemoryUsageStats();
+
+    uint64_t total_ticks = cpu_ticks.load();
+    uint64_t idle_ticks = 0;
+    uint64_t active_ticks = 0;
+
+    for (bool busy : core_busy) {
+        if (busy) active_ticks++;
+        else idle_ticks++;
+    }
+
+    std::cout << "\n=== vmstat ===\n\n";
+    std::cout << std::left << std::setw(25) << "Total memory:" << total << " bytes\n";
+    std::cout << std::left << std::setw(25) << "Used memory:" << used << " bytes\n";
+    std::cout << std::left << std::setw(25) << "Free memory:" << (total - used) << " bytes\n";
+    std::cout << std::left << std::setw(25) << "Idle CPU ticks:" << idle_ticks << "\n";
+    std::cout << std::left << std::setw(25) << "Active CPU ticks:" << active_ticks << "\n";
+    std::cout << std::left << std::setw(25) << "Total CPU ticks:" << total_ticks << "\n";
+    std::cout << std::left << std::setw(25) << "Pages paged in:" << global_mem_manager->getPageInCount() << "\n";
+    std::cout << std::left << std::setw(25) << "Pages paged out:" << global_mem_manager->getPageOutCount() << "\n\n";
+}

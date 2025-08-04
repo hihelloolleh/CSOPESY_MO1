@@ -225,7 +225,11 @@ void cli_loop() {
             std::cout << "Process generator stopped." << std::endl;
         } else if (command == "process-smi") {
             show_global_process_smi();
-        } else if (command == "screen") {
+        } 
+        else if (command == "vmstat") {
+            show_vmstat();
+        }
+        else if (command == "screen") {
             if (arg1 == "-ls") {
                 generate_system_report(std::cout);
             } else if (arg1 == "-s" && !arg2.empty() && !arg3.empty()) {

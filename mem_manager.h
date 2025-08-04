@@ -47,6 +47,9 @@ public:
         return std::unique_lock<std::mutex>(manager_mutex);
     }
 
+    size_t getPageInCount() const { return pageFaults; }
+    size_t getPageOutCount() const { return pageEvictions; }
+
 private:
     // Core memory components
     size_t totalMemory;
@@ -68,8 +71,8 @@ private:
     std::unordered_map<size_t, std::pair<int, size_t>> frameToPageMap;
 
     // Statistics
-    int pageFaults = 0;
-    int pageEvictions = 0;
+    size_t pageFaults = 0;
+    size_t pageEvictions = 0;
 
     // Paging mechanism
     size_t getFreeFrameOrEvict();
