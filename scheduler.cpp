@@ -178,7 +178,7 @@ void process_generator_thread() {
                     queue_cv.notify_all();
                 }
                 else {
-                    std::cout << "[Generator] Memory full. Moving new process " << new_proc->name << " to pending queue." << std::endl;
+                    //std::cout << "\n[Generator] Memory full. Moving new process " << new_proc->name << " to pending queue." << std::endl;
                     std::lock_guard<std::mutex> lock(queue_mutex);
                     process_list.push_back(new_proc);
                     pending_memory_queue.push(new_proc);

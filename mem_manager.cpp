@@ -22,7 +22,8 @@ namespace fs = std::filesystem;
 MemoryManager::MemoryManager(const Config& config)
     : totalMemory(config.max_overall_mem),
     frameSize(config.mem_per_frame),
-    backing_store_filename("csopesy-backing-store.txt") 
+    backing_store_filename("csopesy-backing-store.txt"),
+    total_committed_memory(0)
 {
     if (fs::exists(backing_store_filename)) {
         fs::remove(backing_store_filename);
@@ -79,10 +80,20 @@ bool MemoryManager::createProcess(const Process& proc) {
     const std::string& name = proc.name;
     size_t memoryRequired = proc.memory_required;
 
+    if (total_committed_memory + memoryRequired > totalMemory) {
+       /* std::cerr << "[MemManager] Admission Control DENIED: Cannot create process '"
+            << proc.name << "'.\n";
+        std::cerr << "  Required: " << memoryRequired << " bytes. Committed: " << total_committed_memory
+            << ". Total System Memory: " << totalMemory << ".\n";*/
+        return false;
+    }
+
     if (processTable.find(pid) != processTable.end()) {
         std::cerr << "[MemManager] Error: Process with PID " << pid << " already exists.\n";
         return false;
     }
+
+    total_committed_memory += memoryRequired;
 
     size_t pagesNeeded = (memoryRequired + frameSize - 1) / frameSize;
 
@@ -108,9 +119,13 @@ void MemoryManager::removeProcess(int pid) {
     if (it == processTable.end()) return;
 
     PCB& pcb = it->second;
+
+    total_committed_memory -= pcb.getMemoryRequirement();
+
     for (auto& page : pcb.pageTable) {
         if (page.valid && page.frameIndex != Page::INVALID_FRAME) {
             frameOccupied[page.frameIndex] = false;
+            frameToPageMap.erase(page.frameIndex);
         }
     }
     processTable.erase(it);

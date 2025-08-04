@@ -230,7 +230,7 @@ void cli_loop() {
             show_vmstat();
         }
         else if (command == "screen") {
-            if (arg1 == "-ls") {
+            if (arg1 == "-ls") {    
                 generate_system_report(std::cout);
             } else if (arg1 == "-s" && !arg2.empty() && !arg3.empty()) {
                 try {
@@ -241,13 +241,8 @@ void cli_loop() {
                         std::string unique_name = generate_unique_process_name(arg2);
                         Process* new_proc = create_random_process(unique_name, mem_size);
 
-                        // 3. Register with Memory Manager.
-                        if (!global_mem_manager->createProcess(*new_proc)) {
-                            std::cout << "Failed to create process <" << unique_name << ">.\n";
-                            delete new_proc;
-                        }
-                        else {
-                            // 4. Add to lists and print the correct confirmation message.
+                        // Register with Memory Manager.
+                        if (global_mem_manager->createProcess(*new_proc)) {
                             {
                                 std::lock_guard<std::mutex> lock(queue_mutex);
                                 process_list.push_back(new_proc);
@@ -255,11 +250,12 @@ void cli_loop() {
                             }
                             queue_cv.notify_all();
                             std::cout << "Process <" << unique_name << "> created.\n";
-
-                            // 5. Now, enter the screen for the newly created process.
-                            enter_process_screen(unique_name);
                         }
-                        continue;
+                        else {
+                            std::cout << "Memory allocation failed for process '" << unique_name << "'.\n";
+                            delete new_proc;
+                            continue;
+                        }
                     } else {
                         std::cout << "Invalid memory allocation. Must be a power of 2 between 64 and 65536.\n";
                     }
@@ -356,9 +352,9 @@ void cli_loop() {
                     }
 
                     if (!global_mem_manager->createProcess(*new_proc)) {
-                        std::cout << "Memory allocation failed for process '" << arg2 << "'.\n";
+                        std::cout << "Memory allocation failed for process '" << unique_name << "'.\n";
                         delete new_proc;
-                        continue; // Changed to continue for better user flow
+                        continue; 
                     }
 
                     {

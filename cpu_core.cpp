@@ -67,7 +67,8 @@ void cpu_core_worker(int core_id) {
          
                         process->program_counter = process->instructions.size();
 
-                        global_mem_manager->removeProcess(process->id);
+                        // comment out first, might be messing with memory allocation. 
+                        // global_mem_manager->removeProcess(process->id);
 
                     }
                     else {
