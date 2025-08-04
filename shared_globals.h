@@ -1,8 +1,6 @@
 #ifndef SHARED_GLOBALS_H
 #define SHARED_GLOBALS_H
 
-#include "config.h"
-#include "process.h"
 // --- FORWARD DECLARE MEMORY MANAGER TO AVOID CIRCULAR DEPENDENCY ---
 class MemoryManager;
 // ---
@@ -11,7 +9,12 @@ class MemoryManager;
 #include <queue>
 #include <atomic>
 #include <vector>
+#include <string> 
 #include <cstdint>
+#include "config.h"
+#include "process.h"
+
+const uint16_t SYMBOL_TABLE_SIZE = 64;
 
 // --- System Clock ---
 extern std::atomic<uint64_t> cpu_ticks;
@@ -36,6 +39,8 @@ extern std::queue<Process*> ready_queue;
 extern std::vector<Process*> process_list;
 extern std::queue<Process*> pending_memory_queue;
 extern std::vector<bool> core_busy;
+
+extern std::atomic<int> g_next_pid;
 
 // --- Utility ---
 std::string get_timestamp();

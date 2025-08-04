@@ -9,7 +9,7 @@
 #include <unordered_set>
 #include <algorithm>
 
-std::atomic<int> g_next_pid(1);
+
 
 void clock_thread() {
     while (system_running) {
@@ -30,8 +30,9 @@ Process* create_random_process(const std::string& name, size_t memory_size_overr
     if (memory_size_override > 0) {
         p->memory_required = memory_size_override;
     } else {
-        p->memory_required = (rand() % (global_config.max_mem_per_proc - global_config.min_mem_per_proc + 1)) 
-                             + global_config.min_mem_per_proc;
+        size_t random_mem = (rand() % (global_config.max_mem_per_proc - global_config.min_mem_per_proc + 1))
+            + global_config.min_mem_per_proc;
+        p->memory_required = std::max((size_t)64, random_mem);
     }
 
     int instruction_count = rand() % (global_config.max_ins - global_config.min_ins + 1) + global_config.min_ins;
@@ -41,7 +42,9 @@ Process* create_random_process(const std::string& name, size_t memory_size_overr
     std::vector<std::string> known_variables;
     std::unordered_set<std::string> known_variables_set;
 
-    std::string initial_var = "v_start";
+    int max_vars = std::min(32, instruction_count);
+
+   std::string initial_var = "v_start";
     known_variables.push_back(initial_var);
     known_variables_set.insert(initial_var);
     instructions.push_back({"DECLARE", {initial_var, "0"}});
@@ -50,7 +53,7 @@ Process* create_random_process(const std::string& name, size_t memory_size_overr
         Instruction inst;
         int choice = rand() % 100;
 
-        if (choice < 20) { 
+        if (choice < 20 && known_variables.size() < max_vars) {
             std::string new_var;
             do {
                 new_var = "v" + std::to_string(rand() % 5000);
@@ -73,27 +76,6 @@ Process* create_random_process(const std::string& name, size_t memory_size_overr
     }
 
     p->instructions = std::move(instructions);
-
-    // --- PHASE 3: CALCULATE MEMORY SEGMENTS ---
-    // This is a simulator approximation. We assume each instruction
-    // would take up an average of 8 bytes if it were real machine code.
-    const size_t AVG_INSTRUCTION_SIZE = 8;
-    p->instruction_segment_size = p->instructions.size() * AVG_INSTRUCTION_SIZE;
-
-    // Ensure the data segment has at least some minimum space (e.g., one page).
-    // If the instructions take up almost all the memory, this prevents errors.
-    if (p->instruction_segment_size + 256 > p->memory_required) {
-        if (p->memory_required > 256) {
-            p->instruction_segment_size = p->memory_required - 256;
-        } else {
-            // This process is too small for its code, an edge case.
-            p->instruction_segment_size = p->memory_required;
-        }
-    }
-    
-    // --- FIX: Ensure the data segment starts on an even boundary ---
-    // This prevents writes from crossing page boundaries.
-    p->instruction_segment_size &= ~1; 
 
     return p;
 }
@@ -123,7 +105,7 @@ void process_generator_thread() {
                 current_tick > last_gen_tick &&
                 current_tick % global_config.batch_process_freq == 0) {
                 last_gen_tick = current_tick;
-                Process* new_proc = create_random_process("auto_p" + std::to_string(g_next_pid.load()), 0);
+                Process* new_proc = create_random_process("p" + std::to_string(g_next_pid.load()), 0);
                 if (global_mem_manager->createProcess(*new_proc)) {
                     std::lock_guard<std::mutex> lock(queue_mutex);
                     process_list.push_back(new_proc);

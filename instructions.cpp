@@ -17,19 +17,14 @@ bool is_number(const std::string& s) {
     return std::all_of(s.begin() + start_idx, s.end(), ::isdigit);
 }
 
-// --- PHASE 3: This helper now calculates absolute addresses from data segment offsets ---
 uint16_t get_variable_address(Process* process, const std::string& var_name, bool create_if_new) {
-    // The data segment starts right after the instruction segment.
-    const uint32_t data_segment_start = process->instruction_segment_size; //MAY CAUSE THE MEMORY WARNINGS
 
     if (process->variable_data_offsets.count(var_name)) {
-        // Variable exists, return its absolute virtual address.
-        return data_segment_start + process->variable_data_offsets[var_name];
+        return process->variable_data_offsets[var_name];
     } 
     else if (create_if_new) {
         // Variable is new, assign it a new offset in the data segment.
         uint16_t new_offset = process->next_available_variable_offset;
-        uint16_t new_absolute_addr = data_segment_start + new_offset;
 
         /*
         std::cout << "[DEBUG] Attempting to declare " << var_name
@@ -38,19 +33,20 @@ uint16_t get_variable_address(Process* process, const std::string& var_name, boo
             << " / " << (int)(process->memory_required - data_segment_start) << ")\n";
         */
 
-        // ?? Now check for overflow
-        if (new_absolute_addr + sizeof(uint16_t) > process->memory_required) {
-            std::cerr << "[ERROR] P" << process->id << ": SEGFAULT - Data segment overflow on creating variable '"
-                << var_name << "'. Limit: " << process->memory_required << " bytes.\n";
-            process->state = ProcessState::CRASHED;
-            process->faulting_address = new_absolute_addr;
-            return 0;
+        if (new_offset + sizeof(uint16_t) > SYMBOL_TABLE_SIZE) {
+            std::cerr << "[ERROR] P" << process->id << ": Symbol table full. Cannot declare '"
+                << var_name << "'. Max 32 variables. Instruction ignored.\n";
+            // We return a special value or handle it, but don't crash the process
+            // as per the requirement to "ignore" the instruction.
+            // For simplicity, we can let the caller check for a special return,
+            // but here we'll just log and return an invalid address.
+            return std::numeric_limits<uint16_t>::max(); // Indicates an error
         }
 
         process->variable_data_offsets[var_name] = new_offset;
         process->next_available_variable_offset += sizeof(uint16_t);
-        
-        return new_absolute_addr;
+
+        return new_offset; // The address is the offset itself.
     }
     
     // If we get here, the variable was not found and we were not allowed to create it.
@@ -91,6 +87,10 @@ void write_variable_value(Process* process, const std::string& dest_var_name, ui
     uint16_t var_addr = get_variable_address(process, dest_var_name, true);
     if (process->state == ProcessState::CRASHED) return;
 
+    if (var_addr == std::numeric_limits<uint16_t>::max()) {
+        return;
+    }
+
     // The MemoryManager will handle the data page fault if necessary.
     if (!global_mem_manager->writeMemory(process->id, var_addr, value)) {
         process->had_page_fault = true;
@@ -98,7 +98,6 @@ void write_variable_value(Process* process, const std::string& dest_var_name, ui
     }
 }
 
-// --- The rest of these functions are UNCHANGED ---
 void execute_instruction(Process* process) {
     if (process->state == ProcessState::CRASHED) return;
     if (!process->for_stack.empty()) {

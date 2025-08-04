@@ -26,6 +26,8 @@ std::queue<Process*> ready_queue;
 std::vector<Process*> process_list;
 std::queue<Process*> pending_memory_queue;
 std::vector<bool> core_busy;
+std::atomic<int> g_next_pid(1);
+
 
 // --- Utility Definitions ---
 std::atomic<int> global_quantum_cycle = 0;

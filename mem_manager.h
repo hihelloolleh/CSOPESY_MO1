@@ -32,7 +32,7 @@ public:
     bool touchPage(int pid, uint16_t address);
 
     // Snapshot and reporting
-    void snapshotMemory(int tick);
+    void snapshotMemory(uint64_t tick);
     void flushAsyncWrites();
 
     std::tuple<size_t, size_t> getMemoryUsageStats();
@@ -56,20 +56,20 @@ private:
     std::vector<bool> frameOccupied;
 
     // Page replacement (FIFO)
-    std::queue<int> frameQueue;
+    std::queue<size_t> frameQueue;
 
     // Process and Page management
     std::unordered_map<int, PCB> processTable;
-    std::unordered_map<int, std::pair<int, int>> frameToPageMap;
+    std::unordered_map<size_t, std::pair<int, size_t>> frameToPageMap;
 
     // Statistics
     int pageFaults = 0;
     int pageEvictions = 0;
 
     // Paging mechanism
-    int getFreeFrameOrEvict();
+    size_t getFreeFrameOrEvict();
     void pageIn(PCB& pcb, Page& page);
-    void pageOut(int frameIndex);
+    void pageOut(size_t frameIndex);
     
     // Thread safety and async operations
     std::mutex manager_mutex;

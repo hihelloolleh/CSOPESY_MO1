@@ -17,7 +17,7 @@ struct Instruction {
 enum class ProcessState {
     READY,
     RUNNING,
-    WAITING, // Can be for sleep OR for a page fault
+    WAITING, 
     FINISHED,
     CRASHED
 };
@@ -33,19 +33,13 @@ struct Process {
     int id;
     std::string name;
 
-    // --- PHASE 3 MEMORY-RELATED FIELDS ---
     size_t memory_required = 0;
-    
-    // The size in bytes of the memory region reserved for instructions.
-    // The data segment starts immediately after this.
-    size_t instruction_segment_size = 0; 
     
     // Maps variable names to their OFFSET from the start of the data segment.
     std::map<std::string, uint16_t> variable_data_offsets; 
     uint16_t next_available_variable_offset = 0;
     
     std::optional<uint16_t> faulting_address;
-    // --- END MEMORY-RELATED FIELDS ---
 
     std::vector<Instruction> instructions;
     int program_counter = 0;
@@ -78,7 +72,6 @@ struct Process {
         assigned_core = -1;
         finished = false;
         next_available_variable_offset = 0;
-        instruction_segment_size = 1024; // Or set dynamically if needed
     }
 };
 

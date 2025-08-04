@@ -14,6 +14,8 @@
 #include <filesystem>
 #include <algorithm>
 #include <map>
+#include <limits>
+
 
 namespace fs = std::filesystem;
 
@@ -21,7 +23,7 @@ MemoryManager::MemoryManager(const Config& config)
     : totalMemory(config.max_overall_mem),
     frameSize(config.mem_per_frame) {
 
-    totalFrames = static_cast<int>(totalMemory / frameSize);
+    totalFrames = totalMemory / frameSize;
 
     std::cout << "[MemManager] Initializing with " << totalFrames << " frames of " << frameSize << " bytes each." << std::endl;
 
@@ -50,7 +52,7 @@ bool MemoryManager::createProcess(const Process& proc) {
     PCB pcb(pid, name, memoryRequired);
     
     for (size_t i = 0; i < pagesNeeded; ++i) {
-        Page p(pid, i);
+        Page p(static_cast<int>(pid), static_cast<int>(i));
         pcb.addPage(std::move(p));
     }
     
@@ -70,7 +72,7 @@ void MemoryManager::removeProcess(int pid) {
 
     PCB& pcb = it->second;
     for (auto& page : pcb.pageTable) {
-        if (page.valid && page.frameIndex >= 0 && static_cast<size_t>(page.frameIndex) < frameOccupied.size()) {
+        if (page.valid && page.frameIndex != Page::INVALID_FRAME) {
             frameOccupied[page.frameIndex] = false;
         }
     }
@@ -137,7 +139,6 @@ bool MemoryManager::writeMemory(int pid, uint16_t address, uint16_t value) {
     return true;
 }
 
-// --- PHASE 3: NEW METHOD IMPLEMENTATION ---
 bool MemoryManager::touchPage(int pid, uint16_t address) {
     std::lock_guard<std::mutex> lock(manager_mutex);
     auto it = processTable.find(pid);
@@ -167,8 +168,8 @@ bool MemoryManager::touchPage(int pid, uint16_t address) {
 }
 
 void MemoryManager::pageIn(PCB& pcb, Page& page) {
-    int frameIndex = getFreeFrameOrEvict();
-    if (frameIndex == -1) {
+    size_t frameIndex = getFreeFrameOrEvict();
+    if (frameIndex ==  Page::INVALID_FRAME) {
         std::cerr << "[MemManager] CRITICAL: No frames available and eviction failed. Cannot page in for P" << pcb.getPid() << ".\n";
         return;
     }
@@ -189,14 +190,14 @@ void MemoryManager::pageIn(PCB& pcb, Page& page) {
     //std::cout << "[MemManager] Page fault for P" << pcb.getPid() << " Page " << page.pageNumber << ". Loaded into Frame " << frameIndex << ".\n";
 }
 
-void MemoryManager::pageOut(int frameIndex) {
+void MemoryManager::pageOut(size_t frameIndex) {
     if(frameToPageMap.find(frameIndex) == frameToPageMap.end()) {
         return;
     }
 
     auto page_id = frameToPageMap[frameIndex];
     int pid = page_id.first;
-    int pageNum = page_id.second;
+    size_t pageNum = page_id.second;
 
     auto pcb_it = processTable.find(pid);
     if (pcb_it == processTable.end()) return;
@@ -214,13 +215,13 @@ void MemoryManager::pageOut(int frameIndex) {
 
     page.valid = false;
     page.inMemory = false;
-    page.frameIndex = -1;
+    page.frameIndex = Page::INVALID_FRAME;
 
     frameOccupied[frameIndex] = false;
     frameToPageMap.erase(frameIndex);
 }
 
-int MemoryManager::getFreeFrameOrEvict() {
+size_t MemoryManager::getFreeFrameOrEvict() {
     for (size_t i = 0; i < totalFrames; ++i) {
         if (!frameOccupied[i]) {
             return i;
@@ -231,25 +232,25 @@ int MemoryManager::getFreeFrameOrEvict() {
         return -1;
     }
     
-    int victimFrame = -1;
-    while(!frameQueue.empty()){
-        int potentialVictim = frameQueue.front();
+    size_t victimFrame = Page::INVALID_FRAME;
+    while (!frameQueue.empty()) {
+        size_t potentialVictim = frameQueue.front();
         frameQueue.pop();
-        if(frameOccupied[potentialVictim]){
+        if (frameOccupied[potentialVictim]) {
             victimFrame = potentialVictim;
             break;
         }
     }
     
-    if (victimFrame != -1) {
+    if (victimFrame != Page::INVALID_FRAME) {
         pageOut(victimFrame);
         return victimFrame;
     }
 
-    return -1;
+    return Page::INVALID_FRAME;
 }
 
-void MemoryManager::snapshotMemory(int tick) {
+void MemoryManager::snapshotMemory(uint64_t tick) {
     std::lock_guard<std::mutex> lock(manager_mutex);
 
     std::ostringstream snapshot;
@@ -275,7 +276,7 @@ void MemoryManager::snapshotMemory(int tick) {
         if (frameOccupied[i] && frameToPageMap.count(i)) {
             auto pageInfo = frameToPageMap.at(i);
             int pid = pageInfo.first;
-            int pageNum = pageInfo.second;
+            size_t pageNum = pageInfo.second;
             std::string procName = processTable.count(pid) ? processTable.at(pid).getName() : "???";
             snapshot << "P" << pid << " (" << procName << "), Page " << pageNum;
         } else {
@@ -315,7 +316,7 @@ void MemoryManager::snapshotMemory(int tick) {
     if (!fs::exists(folder)) {
         fs::create_directory(folder);
     }
-    std::string fileName = folder + "/memory_tick_" + std::to_string(tick) + ".txt";
+    std::string fileName = folder + "/memory_stamp_" + std::to_string(tick) + ".txt";
     
     background_tasks.push_back(std::async(std::launch::async, [fileName, snapshotStr]() {
         std::ofstream out(fileName);

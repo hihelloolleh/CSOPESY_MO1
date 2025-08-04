@@ -30,43 +30,21 @@ void cpu_core_worker(int core_id) {
             int instructions_executed_in_quantum = 0;
 
             while (system_running && process->program_counter < process->instructions.size()) {
-                
-                // ==========================================================
-                // === PHASE 3: INSTRUCTION PAGE FAULT HANDLING =============
-                // ==========================================================
 
-                // 1. Calculate the virtual address of the instruction we are ABOUT to execute.
-                const size_t AVG_INSTRUCTION_SIZE = 8; // This must match the value in scheduler.cpp
-                uint16_t instruction_address = process->program_counter * AVG_INSTRUCTION_SIZE;
-                
-                // 2. "Touch" the memory page for this instruction.
-                //    The touchPage method will page it in if it's not resident
-                //    and will return true if a page fault just occurred.
-                if (global_mem_manager->touchPage(process->id, instruction_address)) {
-                    // A page fault for an instruction happened! The process must wait.
-                    /*
-                    std::cout << "[CPU Core " << core_id << "] P" << process->id 
-                              << ": Instruction page fault at address " << instruction_address 
-                              << ". Yielding CPU." << std::endl;
-                    */
-                    process->state = ProcessState::WAITING; // Mark as waiting for I/O
-                    break; // Break out of the execution loop to yield the CPU core.
-                }
-                
-                // ==========================================================
-                
-                // 3. If we get here, the instruction's page is guaranteed to be in memory.
-                //    Now we can execute it. Any DATA page faults will be handled inside here.
+                // The instruction is fetched directly from the std::vector.
+                // Any DATA page faults will be handled inside execute_instruction.
                 execute_instruction(process);
-                
+
                 instructions_executed_in_quantum++;
                 std::this_thread::sleep_for(std::chrono::milliseconds(global_config.delay_per_exec));
 
                 if (process->state != ProcessState::RUNNING) {
-                    // If the process went to WAITING (for SLEEP) or CRASHED, break.
+                    // The process state changed due to SLEEP, CRASH, or a data page fault.
+                    // Break the loop to yield the CPU.
                     break;
                 }
 
+                // Check if the quantum has expired.
                 if (should_yield(process, instructions_executed_in_quantum, should_preempt(), uses_quantum())) {
                     break;
                 }

@@ -26,7 +26,6 @@
 #include "mem_manager.h"
 
 std::vector<std::thread> cpu_worker_threads;
-extern std::atomic<int> g_next_pid; // Make sure g_next_pid from scheduler.cpp is accessible
 
 void start_cpu_cores() {
     cpu_worker_threads.clear();
@@ -217,9 +216,7 @@ void cli_loop() {
         if (!is_initialized) {
             if (command == "initialize") {
                 if (loadConfiguration("config.txt", global_config)) {
-                    // --- INSTANTIATE THE MEMORY MANAGER ---
                     global_mem_manager = new MemoryManager(global_config);
-                    // ---
                     is_initialized = true;
                     std::cout << "System initialized successfully from config.txt." << std::endl;
                     start_cpu_cores();
@@ -284,7 +281,6 @@ void cli_loop() {
                     }
 
                     Process* new_proc = new Process(g_next_pid++, arg2, mem_size);
-                    new_proc->instruction_segment_size = 1024; // Example size; adjust as needed
 
                     // Parse instructions
                     std::stringstream instr_stream(remaining_line);

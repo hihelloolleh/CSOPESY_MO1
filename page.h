@@ -5,20 +5,20 @@
 class Page {
 public:
     int processId;
-    int pageNumber;
+    size_t pageNumber;
     bool valid;      // Is the page in physical memory?
     bool dirty;      // Has the page been modified since being loaded?
-    int frameIndex;  // Its location in physical memory if valid=true
+    size_t frameIndex;  // Its location in physical memory if valid=true
     bool inMemory;   // Redundant with 'valid', but can be useful for clarity
-    
-    // --- ADDED MEMBER ---
+   
     // Used by LRU/LFU replacement algorithms to track usage.
-    // We'll add it now for future compatibility and to fix the current code.
     uint64_t lastAccessed = 0;
+    static const size_t INVALID_FRAME = std::numeric_limits<size_t>::max();
+
 
     Page(int pid, int pageNum)
         : processId(pid), pageNumber(pageNum),
-        valid(false), dirty(false), frameIndex(-1), inMemory(false) {
+        valid(false), dirty(false), frameIndex(INVALID_FRAME), inMemory(false) {
     }
 
     // A simple to_string method can be useful for debugging
