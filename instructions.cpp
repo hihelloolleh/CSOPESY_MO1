@@ -46,7 +46,7 @@ uint16_t get_variable_address(Process* process, const std::string& var_name, boo
         // Variable is new, assign it a new offset in the data segment.
         uint16_t new_offset = process->next_available_variable_offset;
 
-        /*
+        /* For debugging purposes, we can print the variable name and address.
         std::cout << "[DEBUG] Attempting to declare " << var_name
             << " at address " << new_absolute_addr
             << " (used: " << (int)(new_offset + sizeof(uint16_t))

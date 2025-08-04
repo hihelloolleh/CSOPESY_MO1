@@ -3,8 +3,7 @@
 #include <vector>
 #include "page.h" 
 
-// Forward-declare Process to avoid circular include with process.h
-struct Process;
+struct Process; // Forward-declare Process to avoid circular include with process.h
 
 class PCB {
 public:
@@ -13,7 +12,7 @@ public:
     // which we will store directly.
     int pid;
     std::string name;
-    size_t memoryRequirement; // <-- ADDED: To store memory size
+    size_t memoryRequirement; // To store memory size
     std::vector<Page> pageTable;
     bool isActive = false;
 

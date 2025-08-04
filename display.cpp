@@ -180,7 +180,7 @@ void show_global_process_smi() {
     std::cout << "Running processes and memory usage:\n";
     std::cout << "-----------------------------------\n";
 
-    // --- FIX #2: Display per-process memory in Bytes ---
+    // --- Display per-process memory in Bytes ---
     bool found_running_process = false;
     for (const auto& p : process_list) {
         if (!p->finished) {

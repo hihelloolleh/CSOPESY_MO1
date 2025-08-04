@@ -1,7 +1,7 @@
 #ifndef INSTRUCTIONS_H
 #define INSTRUCTIONS_H
 
-#include "process.h" // We need the definition of a Process
+#include "process.h"
 #include "shared_globals.h" // For global_mem_manager
 
 /**

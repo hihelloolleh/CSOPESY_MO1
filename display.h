@@ -5,7 +5,7 @@
 #include "process.h"
 
 void clear_console();
-void print_header(); //WAIT LANG DITO
+void print_header();
 void generate_system_report(std::ostream& output_stream);
 
 void display_process_view(Process* process);

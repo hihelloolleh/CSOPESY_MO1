@@ -81,7 +81,8 @@ bool MemoryManager::createProcess(const Process& proc) {
     size_t memoryRequired = proc.memory_required;
 
     if (total_committed_memory + memoryRequired > totalMemory) {
-       /* std::cerr << "[MemManager] Admission Control DENIED: Cannot create process '"
+       /* FOR DEBUGGING PURPOSES
+        std::cerr << "[MemManager] Admission Control DENIED: Cannot create process '"
             << proc.name << "'.\n";
         std::cerr << "  Required: " << memoryRequired << " bytes. Committed: " << total_committed_memory
             << ". Total System Memory: " << totalMemory << ".\n";*/
@@ -104,7 +105,7 @@ bool MemoryManager::createProcess(const Process& proc) {
         pcb.addPage(std::move(p));
     }
     
-    /*
+    /*   FOR DEBUGGING PURPOSES
     std::cout << "[MemManager] Allocated page table for process " << pid << " (" << name << ") requiring " 
               << memoryRequired << " bytes (" << pagesNeeded << " virtual pages)." << std::endl;
     */
@@ -267,7 +268,8 @@ void MemoryManager::pageOut(size_t frameIndex) {
 
     //If the page is dirty, write its contents to the backing store. >>>
     if (page.dirty) {
-        /*std::cout << "[MemManager] Dirty Page " << page.pageNumber << " of P" << pid
+        /*   FOR DEBUGGING PURPOSES
+        std::cout << "[MemManager] Dirty Page " << page.pageNumber << " of P" << pid
             << " is being written to backing store from Frame " << frameIndex << ".\n";*/
         writePageToBackingStore(pid, pageNum, physicalMemory[frameIndex]);
         page.onBackingStore = true; // Mark that this page now has a representation on disk.

@@ -26,7 +26,6 @@ public:
     bool readMemory(int pid, uint16_t address, uint16_t& value);
     bool writeMemory(int pid, uint16_t address, uint16_t value);
     
-    // --- PHASE 3 ---
     // Checks if a page is valid. If not, pages it in.
     // Returns true if a page fault occurred, false otherwise.
     bool touchPage(int pid, uint16_t address);
