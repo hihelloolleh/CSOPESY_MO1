@@ -37,7 +37,7 @@ void start_cpu_cores() {
     std::cout << global_config.num_cpu << " CPU cores have been started." << std::endl;
 }
 
-void enter_process_screen(const std::string& process_name, bool allow_create, size_t memory_size = 0) {
+void enter_process_screen(const std::string& process_name) {
     Process* target_process = nullptr;
 
     {
@@ -48,24 +48,6 @@ void enter_process_screen(const std::string& process_name, bool allow_create, si
                 break;
             }
         }
-    }
-
-    if (!target_process && allow_create) {
-        target_process = create_random_process(process_name, memory_size);
-
-        if (!global_mem_manager->createProcess(*target_process)) {
-            std::cout << "Failed to create process <" << process_name << ">.\n";
-            delete target_process;
-            return;
-        }
-
-        {
-            std::lock_guard<std::mutex> lock(queue_mutex);
-            process_list.push_back(target_process);
-            ready_queue.push(target_process);
-        }
-        queue_cv.notify_all();
-        std::cout << "Process <" << process_name << "> created.\n";
     }
 
     if (!target_process) {
@@ -87,7 +69,7 @@ void enter_process_screen(const std::string& process_name, bool allow_create, si
             in_process_view = false;
         }
         else if (process_command == "process-smi") {
-            show_global_process_smi();
+            continue;
         }
         else {
             std::stringstream ss(process_command);
@@ -252,7 +234,27 @@ void cli_loop() {
                     // Validate memory size as per spec
                     bool is_power_of_two = (mem_size > 0) && ((mem_size & (mem_size - 1)) == 0);
                     if (is_power_of_two && mem_size >= 64 && mem_size <= 65536) {
-                        enter_process_screen(arg2, true, mem_size);
+                        std::string unique_name = generate_unique_process_name(arg2);
+                        Process* new_proc = create_random_process(unique_name, mem_size);
+
+                        // 3. Register with Memory Manager.
+                        if (!global_mem_manager->createProcess(*new_proc)) {
+                            std::cout << "Failed to create process <" << unique_name << ">.\n";
+                            delete new_proc;
+                        }
+                        else {
+                            // 4. Add to lists and print the correct confirmation message.
+                            {
+                                std::lock_guard<std::mutex> lock(queue_mutex);
+                                process_list.push_back(new_proc);
+                                ready_queue.push(new_proc);
+                            }
+                            queue_cv.notify_all();
+                            std::cout << "Process <" << unique_name << "> created.\n";
+
+                            // 5. Now, enter the screen for the newly created process.
+                            enter_process_screen(unique_name);
+                        }
                         continue;
                     } else {
                         std::cout << "Invalid memory allocation. Must be a power of 2 between 64 and 65536.\n";
@@ -282,8 +284,8 @@ void cli_loop() {
                     if (instruction_block.length() >= 2 && instruction_block.front() == '"' && instruction_block.back() == '"') {
                         instruction_block = instruction_block.substr(1, instruction_block.length() - 2);
                     }
-
-                    Process* new_proc = new Process(g_next_pid++, arg2, mem_size);
+                    std::string unique_name = generate_unique_process_name(arg2);
+                    Process* new_proc = new Process(g_next_pid++, unique_name, mem_size);
 
                     // Tokenize the instruction block by semicolons.
                     std::stringstream instr_stream(instruction_block);
@@ -361,7 +363,7 @@ void cli_loop() {
                         ready_queue.push(new_proc);
                     }
                     queue_cv.notify_one();
-                    std::cout << "Process '" << arg2 << "' created with instructions.\n";
+                    std::cout << "Process '" << unique_name << "' created with instructions.\n";
 
                 }
                 catch (const std::invalid_argument& e) {
@@ -400,7 +402,7 @@ void cli_loop() {
                         }
                     }
                     else {
-                        enter_process_screen(arg2, false);
+                        enter_process_screen(arg2);
                     }
                 }
                 else {

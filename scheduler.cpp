@@ -8,7 +8,33 @@
 #include <vector>
 #include <unordered_set>
 #include <algorithm>
+#include <mutex>
 
+std::string generate_unique_process_name(const std::string& base_name) {
+    std::string final_name = base_name;
+    int counter = 1;
+
+    // This loop needs to be thread-safe as it accesses the global process_list
+    std::lock_guard<std::mutex> lock(queue_mutex);
+
+    // Lambda to check if a name exists
+    auto name_exists = [&](const std::string& name) {
+        for (const auto& p : process_list) {
+            if (p->name == name) {
+                return true;
+            }
+        }
+        return false;
+        };
+
+    // Keep trying new names until we find one that doesn't exist
+    while (name_exists(final_name)) {
+        final_name = base_name + "(" + std::to_string(counter) + ")";
+        counter++;
+    }
+
+    return final_name;
+}
 
 
 void clock_thread() {
@@ -141,7 +167,10 @@ void process_generator_thread() {
                 current_tick > last_gen_tick &&
                 current_tick % global_config.batch_process_freq == 0) {
                 last_gen_tick = current_tick;
-                Process* new_proc = create_random_process("p" + std::to_string(g_next_pid.load()), 0);
+                std::string base_name = "p" + std::to_string(g_next_pid.load());
+                std::string unique_name = generate_unique_process_name(base_name);
+
+                Process* new_proc = create_random_process(unique_name, 0);
                 if (global_mem_manager->createProcess(*new_proc)) {
                     std::lock_guard<std::mutex> lock(queue_mutex);
                     process_list.push_back(new_proc);
