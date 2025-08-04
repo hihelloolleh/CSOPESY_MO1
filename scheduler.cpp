@@ -63,13 +63,49 @@ Process* create_random_process(const std::string& name, size_t memory_size_overr
             known_variables_set.insert(new_var);
             inst = {"DECLARE", {new_var, std::to_string(rand() % 100)}};
         } else { 
-            if (rand() % 4 == 0) {
-                 inst = {"PRINT", {known_variables[rand() % known_variables.size()]}};
-            } else {
+            int op_choice = rand() % 6; 
+            if (op_choice == 0) {
+                inst = { "PRINT", {known_variables[rand() % known_variables.size()]} };
+            }
+            else if (op_choice == 1) { // WRITE instruction
+                std::stringstream hex_addr;
+                size_t num_slots = p->memory_required / 2;
+                if (num_slots > 0) {
+                    size_t random_slot = rand() % num_slots;
+                    uint16_t safe_address = random_slot * 2;
+                    hex_addr << "0x" << std::hex << safe_address;
+                }
+                else {
+                    hex_addr << "0x0"; 
+                }
+
+                std::string value_to_write = (rand() % 2 == 0)
+                    ? known_variables[rand() % known_variables.size()]
+                    : std::to_string(rand() % 65535);
+                inst = { "WRITE", {hex_addr.str(), value_to_write} };
+            }
+            else if (op_choice == 2 && !known_variables.empty()) { // READ instruction
+                std::string dest_var = known_variables[rand() % known_variables.size()];
+                std::stringstream hex_addr;
+
+
+                size_t num_slots = p->memory_required / 2;
+                if (num_slots > 0) {
+                    size_t random_slot = rand() % num_slots;
+                    uint16_t safe_address = random_slot * 2;
+                    hex_addr << "0x" << std::hex << safe_address;
+                }
+                else {
+                    hex_addr << "0x0";
+                }
+
+                inst = { "READ", {dest_var, hex_addr.str()} };
+            }
+            else { // Default to ADD/SUBTRACT
                 std::string dest = known_variables[rand() % known_variables.size()];
                 std::string op1 = known_variables[rand() % known_variables.size()];
                 std::string op2 = (rand() % 2 == 0) ? known_variables[rand() % known_variables.size()] : std::to_string(rand() % 100);
-                inst = {(rand() % 2 == 0 ? "ADD" : "SUBTRACT"), {dest, op1, op2}};
+                inst = { (rand() % 2 == 0 ? "ADD" : "SUBTRACT"), {dest, op1, op2} };
             }
         }
         instructions.push_back(inst);

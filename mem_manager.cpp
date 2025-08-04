@@ -114,7 +114,7 @@ void MemoryManager::removeProcess(int pid) {
         }
     }
     processTable.erase(it);
-    std::cout << "[MemManager] Removed process " << pid << " and freed its frames." << std::endl;
+    /*std::cout << "[MemManager] Removed process " << pid << " and freed its frames." << std::endl;*/
 }
 
 bool MemoryManager::readMemory(int pid, uint16_t address, uint16_t& value) {
@@ -137,7 +137,8 @@ bool MemoryManager::readMemory(int pid, uint16_t address, uint16_t& value) {
     }
 
     if (offset + sizeof(uint16_t) > frameSize) {
-        std::cerr << "[MemManager] Error: Read for P" << pid << " at " << address << " crosses a page boundary.\n";
+        std::cerr << "[MemManager] SEGFAULT: Read for P" << pid << " at " << address
+            << " crosses a page boundary.\n";
         return false;
     }
 
@@ -166,7 +167,8 @@ bool MemoryManager::writeMemory(int pid, uint16_t address, uint16_t value) {
     }
 
     if (offset + sizeof(uint16_t) > frameSize) {
-         std::cerr << "[MemManager] Error: Write for P" << pid << " at " << address << " crosses a page boundary.\n";
+        std::cerr << "[MemManager] SEGFAULT: Write for P" << pid << " at " << address
+            << " crosses a page boundary.\n";
         return false;
     }
 
@@ -214,7 +216,7 @@ void MemoryManager::pageIn(PCB& pcb, Page& page) {
     if (page.onBackingStore) {
         // This page was previously paged out, so its data exists on disk.
         readPageFromBackingStore(pcb.getPid(), page.pageNumber, physicalMemory[frameIndex]);
-        std::cout << "[MemManager] Paged in P" << pcb.getPid() << " Page " << page.pageNumber << " from backing store.\n";
+        /*std::cout << "[MemManager] Paged in P" << pcb.getPid() << " Page " << page.pageNumber << " from backing store.\n";*/
     }
     else {
         // This is the first time the page is touched. It's new, so zero-fill it.
@@ -250,8 +252,8 @@ void MemoryManager::pageOut(size_t frameIndex) {
 
     //If the page is dirty, write its contents to the backing store. >>>
     if (page.dirty) {
-        std::cout << "[MemManager] Dirty Page " << page.pageNumber << " of P" << pid
-            << " is being written to backing store from Frame " << frameIndex << ".\n";
+        /*std::cout << "[MemManager] Dirty Page " << page.pageNumber << " of P" << pid
+            << " is being written to backing store from Frame " << frameIndex << ".\n";*/
         writePageToBackingStore(pid, pageNum, physicalMemory[frameIndex]);
         page.onBackingStore = true; // Mark that this page now has a representation on disk.
         pageEvictions++;

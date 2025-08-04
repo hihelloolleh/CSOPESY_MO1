@@ -81,10 +81,15 @@ void generate_system_report(std::ostream& output_stream) {
     for (const auto& p : finished) {
         output_stream << std::left << std::setw(12) << p->name
             << std::setw(25) << p->end_time
-            << "Core: " << std::setw(5) << p->last_core
-            << std::left << std::setw(10) << "Finished"
-            << std::setw(14) << (std::to_string(p->instructions.size()) + " / " + std::to_string(p->instructions.size()))
-            << " Priority: " << p->priority << "\n";
+            << "Core: " << std::setw(5) << p->last_core;
+            if (p->state == ProcessState::CRASHED) {
+                output_stream << std::left << std::setw(10) << "Crashed";
+            }
+            else {
+                output_stream << std::left << std::setw(10) << "Finished";
+            }
+            output_stream << std::setw(14) << (std::to_string(p->program_counter) + " / " + std::to_string(p->instructions.size()))
+                << " Priority: " << p->priority << "\n";
     }
 
     output_stream << "---------------------------------------------------------\n";
@@ -117,8 +122,16 @@ void display_process_view(Process* process) {
     std::cout << std::left << std::setw(28) << "Lines of code:" << process->instructions.size() << "\n\n";
 
     // --- Finished Message ---
-    if (process->finished) {
+    if (process->finished && process->state == ProcessState::FINISHED) {
         std::cout << "Finished!\n\n";
+    }
+    else if (process->state == ProcessState::CRASHED) {
+        std::cout << "CRASHED! ";
+        if (process->faulting_address.has_value()) {
+            std::cout << "Memory access violation near address "
+                << process->faulting_address.value() << ".";
+        }
+        std::cout << "\n\n";
     }
 }
 

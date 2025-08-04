@@ -17,6 +17,26 @@ bool is_number(const std::string& s) {
     return std::all_of(s.begin() + start_idx, s.end(), ::isdigit);
 }
 
+bool parse_hex_address(const std::string& s, uint16_t& out_address) {
+    if (s.empty()) return false;
+    try {
+        // Use std::stoul which can handle "0x" prefixes automatically.
+        // The third argument '16' specifies the base (hexadecimal).
+        unsigned long value = std::stoul(s, nullptr, 16);
+        if (value > std::numeric_limits<uint16_t>::max()) {
+            return false; // Value is too large for a uint16_t address
+        }
+        out_address = static_cast<uint16_t>(value);
+        return true;
+    }
+    catch (const std::invalid_argument& e) {
+        return false; // Not a valid number
+    }
+    catch (const std::out_of_range& e) {
+        return false; // Out of range for unsigned long
+    }
+}
+
 uint16_t get_variable_address(Process* process, const std::string& var_name, bool create_if_new) {
 
     if (process->variable_data_offsets.count(var_name)) {
@@ -136,6 +156,12 @@ void dispatch_instruction(Process* process, const Instruction& instr) {
     else if (instr.opcode == "SUBTRACT") handle_subtract(process, instr);
     else if (instr.opcode == "SLEEP") handle_sleep(process, instr);
     else if (instr.opcode == "FOR") handle_for(process, instr);
+    else if (instr.opcode == "READ") handle_read(process, instr);
+    else if (instr.opcode == "WRITE") handle_write(process, instr);
+    else {
+        std::cerr << "[ERROR] P" << process->id << ": Unknown instruction '" << instr.opcode << "'.\n";
+        process->state = ProcessState::CRASHED;
+    }
 }
 
 void handle_print(Process* process, const Instruction& instr) {
@@ -207,4 +233,63 @@ void handle_for(Process* process, const Instruction& instr) {
         process->for_stack.push(context);
     }
     catch (...) { process->state = ProcessState::CRASHED; }
+}
+
+void handle_read(Process* process, const Instruction& instr) {
+    if (instr.args.size() != 2) {
+        std::cerr << "[ERROR] P" << process->id << ": READ requires 2 arguments.\n";
+        process->state = ProcessState::CRASHED;
+        return;
+    }
+
+    const std::string& var_name = instr.args[0];
+    const std::string& address_str = instr.args[1];
+    uint16_t address;
+    uint16_t value_read = 0; // defaults to 0 if not initialized
+
+    if (!parse_hex_address(address_str, address)) {
+        std::cerr << "[ERROR] P" << process->id << ": Invalid hexadecimal address '" << address_str << "'.\n";
+        process->state = ProcessState::CRASHED;
+        return;
+    }
+
+    //    The MemoryManager's readMemory will handle access violations and page faults.
+    if (!global_mem_manager->readMemory(process->id, address, value_read)) {
+        process->state = ProcessState::CRASHED;
+        process->faulting_address = address;
+        return;
+    }
+
+    write_variable_value(process, var_name, value_read);
+}
+
+
+void handle_write(Process* process, const Instruction& instr) {
+    if (instr.args.size() != 2) {
+        std::cerr << "[ERROR] P" << process->id << ": WRITE requires 2 arguments.\n";
+        process->state = ProcessState::CRASHED;
+        return;
+    }
+
+    const std::string& address_str = instr.args[0];
+    const std::string& value_str = instr.args[1];
+    uint16_t address;
+
+    if (!parse_hex_address(address_str, address)) {
+        std::cerr << "[ERROR] P" << process->id << ": Invalid hexadecimal address '" << address_str << "'.\n";
+        process->state = ProcessState::CRASHED;
+        return;
+    }
+
+    uint16_t value_to_write = read_variable_value(process, value_str);
+    if (process->state == ProcessState::CRASHED) {
+        // An error occurred while reading the source value (e.g., undeclared variable)
+        return;
+    }
+
+    if (!global_mem_manager->writeMemory(process->id, address, value_to_write)) {
+        process->state = ProcessState::CRASHED;
+        process->faulting_address = address;
+        return;
+    }
 }

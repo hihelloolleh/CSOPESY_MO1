@@ -22,6 +22,8 @@ void handle_add(Process* process, const Instruction& instr);
 void handle_subtract(Process* process, const Instruction& instr);
 void handle_sleep(Process* process, const Instruction& instr);
 void handle_for(Process* process, const Instruction& instr);
+void handle_read(Process* process, const Instruction& instr);
+void handle_write(Process* process, const Instruction& instr);
 
 // Helper functions for memory interaction that fulfill Phase 2 requirements
 uint16_t get_variable_address(Process* process, const std::string& var_name, bool create_if_new);
