@@ -7,7 +7,8 @@
 #include <iomanip>     
 #include <mutex>       
 #include <vector>      
-#include <algorithm>   
+#include <algorithm>
+#include <tuple>
 
 
 // Utility function to clear the console screen
@@ -122,37 +123,66 @@ void display_process_view(Process* process) {
 }
 
 void show_global_process_smi() {
+    std::lock_guard<std::mutex> lock(queue_mutex);
+
+    std::cout << "--------------------------------------------\n";
     std::cout << "| PROCESS-SMI V01.00 Driver Version: 01.00 |\n";
     std::cout << "--------------------------------------------\n";
 
-    // TODO: Replace with real CPU usage if available
-    std::cout << "CPU-Util:       0%\n";
-
-    if (global_mem_manager) {
-        size_t used, total;
-        std::tie(used, total) = global_mem_manager->getMemoryUsageStats();
-
-        size_t usedMiB = used / (1024 * 1024);
-        size_t totalMiB = total / (1024 * 1024);
-        float memUtil = total ? (100.0f * used / total) : 0.0f;
-
-        std::cout << "Memory Usage:   " << usedMiB << "MiB / " << totalMiB << "MiB\n";
-        std::cout << "Memory Util:    " << static_cast<int>(memUtil) << "%\n";
-    }
-    else {
-        std::cout << "Memory Usage:   N/A\n";
-        std::cout << "Memory Util:    N/A\n";
-    }
-
-    std::cout << "\nRunning processes and memory usage:\n";
-    std::cout << "-----------------------------------\n";
-
-    if (global_mem_manager) {
-        auto lock = global_mem_manager->lockManager();
-        for (const auto& [pid, pcb] : global_mem_manager->getProcessTable()) {
-            size_t memKB = pcb.getMemoryRequirement() / 1024;
-            std::cout << "P" << pid << " (" << pcb.getName() << ") - "
-                << memKB << "KB (" << pcb.pageTable.size() << " pages)\n";
+    int cores_used = 0;
+    if (!core_busy.empty()) {
+        for (bool is_busy : core_busy) {
+            if (is_busy) {
+                cores_used++;
+            }
         }
     }
+
+    double cpu_util_percent = (global_config.num_cpu > 0)
+        ? (static_cast<double>(cores_used) / global_config.num_cpu) * 100.0
+        : 0.0;
+
+    std::cout << std::left << std::setw(16) << "CPU-Util:"
+        << std::fixed << std::setprecision(2) << cpu_util_percent << "%\n";
+
+    if (global_mem_manager) {
+        size_t used_bytes, total_bytes;
+        std::tie(used_bytes, total_bytes) = global_mem_manager->getMemoryUsageStats();
+
+        double mem_util_percent = (total_bytes > 0)
+            ? (static_cast<double>(used_bytes) / total_bytes) * 100.0
+            : 0.0;
+
+        std::cout << std::left << std::setw(16) << "Memory Usage:"
+            << used_bytes << " B / " << total_bytes << " B\n";
+
+        std::cout << std::left << std::setw(16) << "Memory Util:"
+            << std::fixed << std::setprecision(2) << mem_util_percent << "%\n";
+    }
+    else {
+        std::cout << std::left << std::setw(16) << "Memory Usage:" << "N/A\n";
+        std::cout << std::left << std::setw(16) << "Memory Util:" << "N/A\n";
+    }
+    std::cout << "===================================\n";
+    std::cout << "Running processes and memory usage:\n";
+    std::cout << "-----------------------------------\n";
+
+    // --- FIX #2: Display per-process memory in Bytes ---
+    bool found_running_process = false;
+    for (const auto& p : process_list) {
+        if (!p->finished) {
+            found_running_process = true;
+            // No conversion needed. p->memory_required is already in bytes.
+            size_t mem_in_bytes = p->memory_required;
+
+            // Print in the format: [process_name] [memory in Bytes]
+            std::cout << std::left << std::setw(20) << p->name
+                << mem_in_bytes << " B\n";
+        }
+    }
+
+    if (!found_running_process) {
+        std::cout << "(No running processes)\n";
+    }
+    std::cout << "-----------------------------------\n";
 }

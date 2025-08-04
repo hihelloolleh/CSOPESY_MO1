@@ -73,9 +73,12 @@ void enter_process_screen(const std::string& process_name, bool allow_create, si
         return;
     }
 
+
     // === INTERACTIVE CLI FOR PROCESS ===
     bool in_process_view = true;
     while (in_process_view) {
+        clear_console();
+        display_process_view(target_process);
         std::cout << "root:\\" << process_name << "> ";
         std::string process_command;
         std::getline(std::cin, process_command);
@@ -251,6 +254,7 @@ void cli_loop() {
                     bool is_power_of_two = (mem_size > 0) && ((mem_size & (mem_size - 1)) == 0);
                     if (is_power_of_two && mem_size >= 64 && mem_size <= 65536) {
                         enter_process_screen(arg2, true, mem_size);
+                        continue;
                     } else {
                         std::cout << "Invalid memory allocation. Must be a power of 2 between 64 and 65536.\n";
                     }
@@ -330,6 +334,7 @@ void cli_loop() {
             
             else if (arg1 == "-r" && !arg2.empty()) {
                 enter_process_screen(arg2, false);
+                continue;
             } else {
                 std::cout << "Invalid screen usage. Try 'screen -ls' or 'screen -s <name> <mem_size>'.\n";
             }
