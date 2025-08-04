@@ -165,16 +165,32 @@ void dispatch_instruction(Process* process, const Instruction& instr) {
 }
 
 void handle_print(Process* process, const Instruction& instr) {
+    if (instr.args.empty()) return;
+
     std::stringstream formatted_log;
     formatted_log << get_timestamp() << " Core:" << process->assigned_core << " \"";
-    for (const std::string& arg : instr.args) {
-        if (process->state == ProcessState::CRASHED) return;
-        if (is_number(arg)) { formatted_log << arg; } 
-        else {
+
+    for (size_t i = 0; i < instr.args.size(); ++i) {
+        const std::string& arg = instr.args[i];
+
+        // Check if the argument is a known variable in the process's symbol table.
+        if (process->variable_data_offsets.count(arg)) {
+            // If it is a variable, read its value.
             uint16_t value_to_print = read_variable_value(process, arg);
-            if (process->state != ProcessState::CRASHED) formatted_log << value_to_print;
+            if (process->state == ProcessState::CRASHED) return;
+            formatted_log << value_to_print;
+        }
+        else {
+            // If it's not a variable, treat it as a literal string.
+            formatted_log << arg;
+        }
+
+        // Add a space between arguments, but not after the last one.
+        if (i < instr.args.size() - 1) {
+            formatted_log << " ";
         }
     }
+
     formatted_log << "\"";
     process->logs.push_back(formatted_log.str());
 }

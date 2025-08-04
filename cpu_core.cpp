@@ -55,24 +55,28 @@ void cpu_core_worker(int core_id) {
 
             {
                 std::lock_guard<std::mutex> lock(queue_mutex);
-                bool work_was_added = false; // A flag to see if we need to notify
 
                 // The process's turn is over, figure out where it goes next.
                 if (process->state == ProcessState::RUNNING) {
                     // It was still running (quantum expired or finished).
                     if (process->program_counter >= process->instructions.size()) {
+                        // --- The process has completed all its instructions. ---
                         process->state = ProcessState::FINISHED;
                         process->finished = true;
                         process->end_time = get_timestamp();
+         
+                        process->program_counter = process->instructions.size();
+
                         global_mem_manager->removeProcess(process->id);
-                    } else {
-                        // Quantum expired, put it back on the ready queue.
+
+                    }
+                    else {
+                        // Quantum expired, but the process is not finished. Put it back on the ready queue.
                         process->state = ProcessState::READY;
                         ready_queue.push(process);
                     }
-                } else if (process->state == ProcessState::WAITING) {
-                    // It was waiting for a page fault to resolve or for SLEEP.
-                    // In either case, it's ready for another turn.
+                }
+                else if (process->state == ProcessState::WAITING) {
                     process->state = ProcessState::READY;
                     ready_queue.push(process);
                 }
@@ -81,7 +85,6 @@ void cpu_core_worker(int core_id) {
                     process->end_time = get_timestamp();
                     global_mem_manager->removeProcess(process->id);
                 }
-
                 queue_cv.notify_all();
             }
         }

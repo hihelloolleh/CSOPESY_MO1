@@ -264,57 +264,95 @@ void cli_loop() {
             }
 
             else if (arg1 == "-c" && !arg2.empty() && !arg3.empty()) {
-                std::string remaining_line;
-                std::getline(ss, remaining_line); // Get instruction string
-
-                // Remove possible surrounding quotes
-                if (!remaining_line.empty() && remaining_line.front() == '"') {
-                    remaining_line.erase(0, 1);
-                }
-                if (!remaining_line.empty() && remaining_line.back() == '"') {
-                    remaining_line.pop_back();
-                }
-
                 try {
                     size_t mem_size = std::stoull(arg3);
                     bool is_power_of_two = (mem_size > 0) && ((mem_size & (mem_size - 1)) == 0);
                     if (!is_power_of_two || mem_size < 64 || mem_size > 65536) {
                         std::cout << "Invalid memory size. Must be power of 2 between 64 and 65536.\n";
-                        return;
+                        continue;
+                    }
+
+                    // Read the entire rest of the line, which contains the instruction block.
+                    std::string instruction_block;
+                    std::getline(ss, instruction_block);
+
+                    // Aggressively trim whitespace and outer quotes from the entire block.
+                    instruction_block.erase(0, instruction_block.find_first_not_of(" \t\n\r"));
+                    instruction_block.erase(instruction_block.find_last_not_of(" \t\n\r") + 1);
+                    if (instruction_block.length() >= 2 && instruction_block.front() == '"' && instruction_block.back() == '"') {
+                        instruction_block = instruction_block.substr(1, instruction_block.length() - 2);
                     }
 
                     Process* new_proc = new Process(g_next_pid++, arg2, mem_size);
 
-                    // Parse instructions
-                    std::stringstream instr_stream(remaining_line);
+                    // Tokenize the instruction block by semicolons.
+                    std::stringstream instr_stream(instruction_block);
                     std::string token;
                     while (std::getline(instr_stream, token, ';')) {
-                        std::stringstream instr_line(token);
+                        // Trim whitespace from each individual instruction token.
+                        token.erase(0, token.find_first_not_of(" \t\n\r"));
+                        token.erase(token.find_last_not_of(" \t\n\r") + 1);
+                        if (token.empty()) continue;
+
+                        // Manually separate the opcode from the rest of the arguments.
                         std::string opcode;
-                        instr_line >> opcode;
+                        std::string rest_of_line;
+                        size_t split_pos = token.find_first_of(" ("); // Split at first space or parenthesis
+
+                        if (split_pos == std::string::npos) { // Command with no arguments
+                            opcode = token;
+                        }
+                        else {
+                            opcode = token.substr(0, split_pos);
+                            rest_of_line = token.substr(split_pos);
+                        }
 
                         Instruction instr;
                         instr.opcode = opcode;
 
-                        std::string arg;
-                        while (instr_line >> arg) {
-                            instr.args.push_back(arg);
+                        if (opcode == "PRINT") {
+                            size_t first_p = rest_of_line.find('(');
+                            size_t last_p = rest_of_line.rfind(')');
+                            if (first_p == std::string::npos || last_p == std::string::npos || last_p < first_p) {
+                                std::cerr << "Invalid PRINT syntax in '" << token << "': missing or mismatched parentheses.\n";
+                                continue;
+                            }
+
+                            std::string content = rest_of_line.substr(first_p + 1, last_p - first_p - 1);
+
+                            // Tokenize the content by the '+' delimiter
+                            std::stringstream content_stream(content);
+                            std::string part;
+                            while (std::getline(content_stream, part, '+')) {
+                                part.erase(0, part.find_first_not_of(" \t\n\r"));
+                                part.erase(part.find_last_not_of(" \t\n\r") + 1);
+                                if (part.length() >= 2 && part.front() == '"' && part.back() == '"') {
+                                    part = part.substr(1, part.length() - 2);
+                                }
+                                if (!part.empty()) instr.args.push_back(part);
+                            }
+                        }
+                        else {
+                            std::stringstream arg_stream(rest_of_line);
+                            std::string arg;
+                            while (arg_stream >> arg) {
+                                instr.args.push_back(arg);
+                            }
                         }
 
                         new_proc->instructions.push_back(instr);
                     }
 
-                    if (new_proc->instructions.size() < 1 || new_proc->instructions.size() > 50) {
-                        std::cout << "invalid command\n";
+                    if (new_proc->instructions.empty() || new_proc->instructions.size() > 50) {
+                        std::cout << "Invalid command: Must have between 1 and 50 instructions.\n";
                         delete new_proc;
-                        return;
+                        continue;
                     }
 
-                    // Register process with memory manager
                     if (!global_mem_manager->createProcess(*new_proc)) {
                         std::cout << "Memory allocation failed for process '" << arg2 << "'.\n";
                         delete new_proc;
-                        return;
+                        continue; // Changed to continue for better user flow
                     }
 
                     {
@@ -323,16 +361,51 @@ void cli_loop() {
                         ready_queue.push(new_proc);
                     }
                     queue_cv.notify_one();
-
                     std::cout << "Process '" << arg2 << "' created with instructions.\n";
+
+                }
+                catch (const std::invalid_argument& e) {
+                    std::cout << "Invalid memory size format for '" << arg3 << "'. Please provide a number.\n";
                 }
                 catch (...) {
-                    std::cout << "Invalid arguments for screen -c\n";
+                    std::cout << "Invalid arguments for screen -c. Usage: screen -c <name> <size> \"<instructions>\"\n";
                 }
             }
-            
             else if (arg1 == "-r" && !arg2.empty()) {
-                enter_process_screen(arg2, false);
+                Process* target_process = nullptr;
+                {
+                    std::lock_guard<std::mutex> lock(queue_mutex);
+                    for (auto& p : process_list) {
+                        if (p->name == arg2) { 
+                            target_process = p;
+                            break;
+                        }
+                    }
+                }
+
+                if (target_process) {
+                    // Process was found. Check if it crashed.
+                    if (target_process->state == ProcessState::CRASHED) {
+                        std::cout << "Process <" << target_process->name
+                            << "> shut down due to memory access violation error that occurred at "
+                            << target_process->end_time << ". ";
+
+                        if (target_process->faulting_address.has_value()) {
+                            std::stringstream hex_stream;
+                            hex_stream << "0x" << std::hex << target_process->faulting_address.value();
+                            std::cout << hex_stream.str() << " invalid.\n";
+                        }
+                        else {
+                            std::cout << "Invalid memory address.\n";
+                        }
+                    }
+                    else {
+                        enter_process_screen(arg2, false);
+                    }
+                }
+                else {
+                    std::cout << "Process <" << arg2 << "> not found.\n";
+                }
                 continue;
             } else {
                 std::cout << "Invalid screen usage. Try 'screen -ls' or 'screen -s <name> <mem_size>'.\n";
