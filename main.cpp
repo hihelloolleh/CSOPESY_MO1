@@ -241,10 +241,9 @@ void cli_loop() {
         } else if (command == "scheduler-stop") {
             generating_processes = false;
             std::cout << "Process generator stopped." << std::endl;
-        } 
-        else if (command == "process-smi") {
+        } else if (command == "process-smi") {
             show_global_process_smi();
-        }  else if (command == "screen") {
+        } else if (command == "screen") {
             if (arg1 == "-ls") {
                 generate_system_report(std::cout);
             } else if (arg1 == "-s" && !arg2.empty() && !arg3.empty()) {

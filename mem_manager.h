@@ -52,8 +52,13 @@ private:
     size_t totalMemory;
     size_t frameSize;
     size_t totalFrames;
+    size_t max_pages_per_process;
     std::vector<std::vector<uint8_t>> physicalMemory;
     std::vector<bool> frameOccupied;
+    std::string backing_store_filename;
+
+    void writePageToBackingStore(int pid, size_t pageNum, const std::vector<uint8_t>& data);
+    void readPageFromBackingStore(int pid, size_t pageNum, std::vector<uint8_t>& data);
 
     // Page replacement (FIFO)
     std::queue<size_t> frameQueue;
@@ -76,6 +81,4 @@ private:
     std::mutex snapshot_mutex;
     std::string last_snapshot_signature;
     std::vector<std::future<void>> background_tasks;
-
-  
 };

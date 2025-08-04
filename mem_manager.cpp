@@ -21,9 +21,17 @@ namespace fs = std::filesystem;
 
 MemoryManager::MemoryManager(const Config& config)
     : totalMemory(config.max_overall_mem),
-    frameSize(config.mem_per_frame) {
+    frameSize(config.mem_per_frame),
+    backing_store_filename("csopesy-backing-store.txt") 
+{
+    if (fs::exists(backing_store_filename)) {
+        fs::remove(backing_store_filename);
+        std::cout << "[MemManager] Removed old backing store file." << std::endl;
+    }
 
     totalFrames = totalMemory / frameSize;
+    max_pages_per_process = config.max_mem_per_proc / frameSize;
+
 
     std::cout << "[MemManager] Initializing with " << totalFrames << " frames of " << frameSize << " bytes each." << std::endl;
 
@@ -34,6 +42,35 @@ MemoryManager::MemoryManager(const Config& config)
 MemoryManager::~MemoryManager() {
     flushAsyncWrites();
 }
+
+// Writes a page of data to its unique position in the backing store file.
+void MemoryManager::writePageToBackingStore(int pid, size_t pageNum, const std::vector<uint8_t>& pageData) {
+    std::streampos position = (pid * max_pages_per_process + pageNum) * frameSize;
+
+    std::fstream backingStore(backing_store_filename, std::ios::in | std::ios::out | std::ios::binary);
+    if (!backingStore) {
+        backingStore.open(backing_store_filename, std::ios::out | std::ios::binary);
+        backingStore.close();
+        backingStore.open(backing_store_filename, std::ios::in | std::ios::out | std::ios::binary);
+    }
+
+    backingStore.seekp(position);
+    backingStore.write(reinterpret_cast<const char*>(pageData.data()), frameSize);
+}
+
+// Reads a page of data from its unique position in the backing store file.
+void MemoryManager::readPageFromBackingStore(int pid, size_t pageNum, std::vector<uint8_t>& pageData) {
+    std::streampos position = (pid * max_pages_per_process + pageNum) * frameSize;
+
+    std::ifstream backingStore(backing_store_filename, std::ios::binary);
+    if (backingStore) {
+        backingStore.seekg(position);
+        backingStore.read(reinterpret_cast<char*>(pageData.data()), frameSize);
+        // If the read doesn't get all the bytes (e.g., file is new),
+        // the remaining bytes in pageData will stay as they were (likely zero).
+    }
+}
+
 
 bool MemoryManager::createProcess(const Process& proc) {
     std::lock_guard<std::mutex> lock(manager_mutex);
@@ -169,33 +206,37 @@ bool MemoryManager::touchPage(int pid, uint16_t address) {
 
 void MemoryManager::pageIn(PCB& pcb, Page& page) {
     size_t frameIndex = getFreeFrameOrEvict();
-    if (frameIndex ==  Page::INVALID_FRAME) {
-        std::cerr << "[MemManager] CRITICAL: No frames available and eviction failed. Cannot page in for P" << pcb.getPid() << ".\n";
+    if (frameIndex == Page::INVALID_FRAME) {
+        std::cerr << "[MemManager] CRITICAL: No frames available. Cannot page in for P" << pcb.getPid() << ".\n";
         return;
     }
-    
-    std::fill(physicalMemory[frameIndex].begin(), physicalMemory[frameIndex].end(), 0);
+
+    if (page.onBackingStore) {
+        // This page was previously paged out, so its data exists on disk.
+        readPageFromBackingStore(pcb.getPid(), page.pageNumber, physicalMemory[frameIndex]);
+        std::cout << "[MemManager] Paged in P" << pcb.getPid() << " Page " << page.pageNumber << " from backing store.\n";
+    }
+    else {
+        // This is the first time the page is touched. It's new, so zero-fill it.
+        std::fill(physicalMemory[frameIndex].begin(), physicalMemory[frameIndex].end(), 0);
+    }
 
     frameOccupied[frameIndex] = true;
-    frameToPageMap[frameIndex] = {pcb.getPid(), page.pageNumber};
-    
+    frameToPageMap[frameIndex] = { pcb.getPid(), page.pageNumber };
     page.frameIndex = frameIndex;
     page.valid = true;
     page.inMemory = true;
     page.dirty = false;
-
     frameQueue.push(frameIndex);
-
     pageFaults++;
-    //std::cout << "[MemManager] Page fault for P" << pcb.getPid() << " Page " << page.pageNumber << ". Loaded into Frame " << frameIndex << ".\n";
 }
 
 void MemoryManager::pageOut(size_t frameIndex) {
-    if(frameToPageMap.find(frameIndex) == frameToPageMap.end()) {
+    if (frameToPageMap.find(frameIndex) == frameToPageMap.end()) {
         return;
     }
 
-    auto page_id = frameToPageMap[frameIndex];
+    auto page_id = frameToPageMap.at(frameIndex);
     int pid = page_id.first;
     size_t pageNum = page_id.second;
 
@@ -203,20 +244,22 @@ void MemoryManager::pageOut(size_t frameIndex) {
     if (pcb_it == processTable.end()) return;
 
     PCB& pcb = pcb_it->second;
-    if (static_cast<size_t>(pageNum) >= pcb.pageTable.size()) return;
+    if (pageNum >= pcb.pageTable.size()) return;
 
     Page& page = pcb.pageTable[pageNum];
 
-    //std::cout << "[MemManager] Evicting Page " << page.pageNumber << " of P" << pid << " from Frame " << frameIndex << ".\n";
-    
+    //If the page is dirty, write its contents to the backing store. >>>
     if (page.dirty) {
+        std::cout << "[MemManager] Dirty Page " << page.pageNumber << " of P" << pid
+            << " is being written to backing store from Frame " << frameIndex << ".\n";
+        writePageToBackingStore(pid, pageNum, physicalMemory[frameIndex]);
+        page.onBackingStore = true; // Mark that this page now has a representation on disk.
         pageEvictions++;
     }
 
     page.valid = false;
     page.inMemory = false;
     page.frameIndex = Page::INVALID_FRAME;
-
     frameOccupied[frameIndex] = false;
     frameToPageMap.erase(frameIndex);
 }
