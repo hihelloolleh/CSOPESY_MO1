@@ -54,9 +54,10 @@ bool MemoryManager::createProcess(const Process& proc) {
         pcb.addPage(std::move(p));
     }
     
+    /*
     std::cout << "[MemManager] Allocated page table for process " << pid << " (" << name << ") requiring " 
               << memoryRequired << " bytes (" << pagesNeeded << " virtual pages)." << std::endl;
-
+    */
     processTable[pid] = std::move(pcb);
     return true;
 }
