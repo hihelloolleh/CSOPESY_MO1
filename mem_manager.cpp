@@ -1,9 +1,11 @@
 #include "mem_manager.h"
+#include "frame.h"
 #include "pcb.h"
 #include "page.h"
 #include "process.h"
 #include "config.h"
 #include "shared_globals.h" 
+#include <vector>
 #include <iostream>
 #include <iomanip>
 #include <cstring>
@@ -36,7 +38,7 @@ MemoryManager::MemoryManager(const Config& config)
 
     std::cout << "[MemManager] Initializing with " << totalFrames << " frames of " << frameSize << " bytes each." << std::endl;
 
-    physicalMemory.resize(totalFrames, std::vector<uint8_t>(frameSize, 0));
+    physicalMemory.resize(totalFrames, Frame(frameSize));
     frameOccupied.resize(totalFrames, false);
 }
 
@@ -158,7 +160,7 @@ bool MemoryManager::readMemory(int pid, uint16_t address, uint16_t& value) {
         return false;
     }
 
-    std::memcpy(&value, &physicalMemory[page.frameIndex][offset], sizeof(uint16_t));
+    std::memcpy(&value, &physicalMemory[page.frameIndex].data[offset], sizeof(uint16_t));
     page.lastAccessed = cpu_ticks.load();
     return true;
 }
@@ -188,7 +190,7 @@ bool MemoryManager::writeMemory(int pid, uint16_t address, uint16_t value) {
         return false;
     }
 
-    std::memcpy(&physicalMemory[page.frameIndex][offset], &value, sizeof(uint16_t));
+    std::memcpy(&physicalMemory[page.frameIndex].data[offset], &value, sizeof(uint16_t));
     page.dirty = true;
     page.lastAccessed = cpu_ticks.load();
     return true;
@@ -231,12 +233,12 @@ void MemoryManager::pageIn(PCB& pcb, Page& page) {
 
     if (page.onBackingStore) {
         // This page was previously paged out, so its data exists on disk.
-        readPageFromBackingStore(pcb.getPid(), page.pageNumber, physicalMemory[frameIndex]);
+        readPageFromBackingStore(pcb.getPid(), page.pageNumber, physicalMemory[frameIndex].data);
         /*std::cout << "[MemManager] Paged in P" << pcb.getPid() << " Page " << page.pageNumber << " from backing store.\n";*/
     }
     else {
         // This is the first time the page is touched. It's new, so zero-fill it.
-        std::fill(physicalMemory[frameIndex].begin(), physicalMemory[frameIndex].end(), 0);
+        std::fill(physicalMemory[frameIndex].data.begin(), physicalMemory[frameIndex].data.end(), 0);
     }
 
     frameOccupied[frameIndex] = true;
@@ -271,7 +273,7 @@ void MemoryManager::pageOut(size_t frameIndex) {
         /*   FOR DEBUGGING PURPOSES
         std::cout << "[MemManager] Dirty Page " << page.pageNumber << " of P" << pid
             << " is being written to backing store from Frame " << frameIndex << ".\n";*/
-        writePageToBackingStore(pid, pageNum, physicalMemory[frameIndex]);
+        writePageToBackingStore(pid, pageNum, physicalMemory[frameIndex].data);
         page.onBackingStore = true; // Mark that this page now has a representation on disk.
         pageEvictions++;
     }

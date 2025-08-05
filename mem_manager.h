@@ -1,4 +1,5 @@
 #pragma once
+#include "frame.h"
 #include <vector>
 #include <unordered_map>
 #include <queue>
@@ -56,7 +57,7 @@ private:
     size_t totalFrames;
     size_t max_pages_per_process;
     size_t total_committed_memory = 0;
-    std::vector<std::vector<uint8_t>> physicalMemory;
+    std::vector<Frame> physicalMemory;
     std::vector<bool> frameOccupied;
     std::string backing_store_filename;
 
