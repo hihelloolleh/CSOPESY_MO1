@@ -58,15 +58,23 @@ The memory manager is a core component with its own set of classes:
 **System Monitoring Tools:** Includes process-smi and vmstat to provide detailed reports on memory usage, CPU utilization, and paging statistics.<br>
 
 ## Commands:
-Command	Description
-initialize	Loads config.txt and starts the CPU core threads. Must be run first.
-scheduler-start	Starts the automatic process generator.
-scheduler-stop	Stops the automatic process generator.
-screen -s <name> <size>	Creates a new process with a given name and memory size with random instructions.
-screen -c <name> <size> "<instr>"	Creates a new process with a specific set of semi-colon separated instructions.
-screen -r <name>	Views the state of a running, finished, or crashed process.
-screen -ls	Lists all running and finished processes in the system.
-process-smi	Displays a high-level summary of memory and CPU usage.
-vmstat	Shows detailed virtual memory statistics, including page-ins and page-outs.
-exit	Shuts down the simulator and cleans up resources.
+**initialize**	Loads config.txt and starts the CPU core threads. Must be run first.<br>
+
+**scheduler-start**	Starts the automatic process generator.<br>
+
+**scheduler-stop**	Stops the automatic process generator.<br>
+
+**screen -s <name> <size>**	Creates a new process with a given name and memory size with random instructions.<br>
+
+**screen -c <name> <size> "<instr>"**	Creates a new process with a specific set of semi-colon separated instructions.<br>
+
+**screen -r <name>**	Views the state of a running, finished, or crashed process.<br>
+
+**screen -ls**	Lists all running and finished processes in the system.<br>
+
+**process-smi**	Displays a high-level summary of memory and CPU usage.<br>
+
+**vmstat**	Shows detailed virtual memory statistics, including page-ins and page-outs.<br>
+
+**exit**	Shuts down the simulator and cleans up resources.<br>
 
