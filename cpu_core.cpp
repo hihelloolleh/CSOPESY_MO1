@@ -31,9 +31,22 @@ void cpu_core_worker(int core_id) {
 
             while (system_running && process->program_counter < process->instructions.size()) {
 
-                // The instruction is fetched directly from the std::vector.
-                // Any DATA page faults will be handled inside execute_instruction.
+                if (global_config.delay_per_exec == 0) {
+                    uint64_t current_tick = cpu_ticks.load();
+                    while (system_running && cpu_ticks.load() <= current_tick) {                      
+                        std::this_thread::sleep_for(std::chrono::nanoseconds(100));
+                    }
+                }
+
                 execute_instruction(process);
+
+                if (global_config.delay_per_exec > 0) {
+                    uint64_t start_tick = cpu_ticks.load();
+                    uint64_t end_tick = start_tick + global_config.delay_per_exec;
+                    while (system_running && cpu_ticks.load() < end_tick) {
+                        std::this_thread::sleep_for(std::chrono::nanoseconds(100));
+                    }
+                }
 
                 instructions_executed_in_quantum++;
                 std::this_thread::sleep_for(std::chrono::milliseconds(global_config.delay_per_exec));
