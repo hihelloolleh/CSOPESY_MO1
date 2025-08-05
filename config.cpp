@@ -126,7 +126,7 @@ bool correctAndValidateConfig(Config& config) {
         config.max_overall_mem = DEFAULT_MAX_OVERALL_MEM;
         corrected = true;
     }
-    if (!isPowerOfTwo(config.mem_per_frame) || config.mem_per_frame < MIN_MEM_VALUE || config.mem_per_frame > MAX_MEM_VALUE) {
+    if (!isPowerOfTwo(config.mem_per_frame)) {
         std::cerr << "Correcting mem-per-frame from " << config.mem_per_frame << " to default " << DEFAULT_MEM_PER_FRAME << " (must be power of 2, 64 <= n <= 65536)\n";
         config.mem_per_frame = DEFAULT_MEM_PER_FRAME;
         corrected = true;

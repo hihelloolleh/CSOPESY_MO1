@@ -385,7 +385,7 @@ void cli_loop() {
                     }
                 }
 
-                if (target_process->state != ProcessState::FINISHED) {
+                if (target_process) {
                     // Process was found. Check if it crashed.
                     if (target_process->state == ProcessState::CRASHED) {
                         std::cout << "Process <" << target_process->name
