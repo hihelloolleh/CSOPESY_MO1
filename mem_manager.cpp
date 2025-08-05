@@ -82,14 +82,14 @@ bool MemoryManager::createProcess(const Process& proc) {
     const std::string& name = proc.name;
     size_t memoryRequired = proc.memory_required;
 
-    if (total_committed_memory + memoryRequired > totalMemory) {
+    //if (total_committed_memory + memoryRequired > totalMemory) {
        /* FOR DEBUGGING PURPOSES
         std::cerr << "[MemManager] Admission Control DENIED: Cannot create process '"
             << proc.name << "'.\n";
         std::cerr << "  Required: " << memoryRequired << " bytes. Committed: " << total_committed_memory
             << ". Total System Memory: " << totalMemory << ".\n";*/
-        return false;
-    }
+    //    return false;
+   // }
 
     if (processTable.find(pid) != processTable.end()) {
         std::cerr << "[MemManager] Error: Process with PID " << pid << " already exists.\n";
