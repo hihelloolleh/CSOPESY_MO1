@@ -31,4 +31,42 @@ The simulator is built on a few key components that work together:
 
 **display.cpp:** Provides functions for printing formatted output to the console, like system reports and process views.<br>
 
--a shared_globals.h: Declares global variables, mutexes, and condition variables that are shared across all threads to maintain a consistent system state.<br>
+**-a shared_globals.h:** Declares global variables, mutexes, and condition variables that are shared across all threads to maintain a consistent system state.<br>
+
+## Memory Management Subsystem:
+The memory manager is a core component with its own set of classes:
+
+**mem_manager.cpp:** The heart of the memory system. It manages physical frames, implements the page replacement algorithm (FIFO), handles page-in and page-out requests, and tracks memory usage statistics.
+
+**pcb.h (Process Control Block):** A data structure held by the MemoryManager that contains the metadata for a process's memory, including its page table.
+
+**page.h:**  Represents a single entry in a page table, tracking whether the page is valid (in memory), dirty (modified), and where it is located.
+
+## Key Features
+**Multi-threading CPU Simulation:** Simulates a multi-core environment where each core runs as a separate thread.<br>
+
+**Pluggable Scheduling Algorithms:** Supports multiple scheduling algorithms (like FCFS and RR) configurable via a text file.<br>
+
+**Demand Paging Memory Management:** Implements a memory manager that only loads pages from a backing store into physical memory when they are needed, handling page faults.<br>
+
+**Backing Store Simulation:** Uses a text file (csopesy-backing-store.txt) to simulate secondary storage for pages that are not in physical memory.<br>
+
+**Memory Protection:** Simulates segmentation faults by terminating processes that attempt to access memory outside their allocated virtual address space.<br>
+
+**Interactive Command-Line Interface:** Allows users to create processes, inject custom instructions, and monitor the system state in real-time.<br>
+
+**System Monitoring Tools:** Includes process-smi and vmstat to provide detailed reports on memory usage, CPU utilization, and paging statistics.<br>
+
+## Commands:
+Command	Description
+initialize	Loads config.txt and starts the CPU core threads. Must be run first.
+scheduler-start	Starts the automatic process generator.
+scheduler-stop	Stops the automatic process generator.
+screen -s <name> <size>	Creates a new process with a given name and memory size with random instructions.
+screen -c <name> <size> "<instr>"	Creates a new process with a specific set of semi-colon separated instructions.
+screen -r <name>	Views the state of a running, finished, or crashed process.
+screen -ls	Lists all running and finished processes in the system.
+process-smi	Displays a high-level summary of memory and CPU usage.
+vmstat	Shows detailed virtual memory statistics, including page-ins and page-outs.
+exit	Shuts down the simulator and cleans up resources.
+
