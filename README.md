@@ -68,7 +68,7 @@ The memory manager is a core component with its own set of classes:
 
 **screen -c <name> <size> "<instr>"**	Creates a new process with a specific set of semi-colon separated instructions.<br>
 
-**screen -r <name>**	Views the state of a running, finished, or crashed process.<br>
+**screen -r <name>**	Views the state of a finished, or crashed process.<br>
 
 **screen -ls**	Lists all running and finished processes in the system.<br>
 
